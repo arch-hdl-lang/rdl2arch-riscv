@@ -41,3 +41,12 @@ def validate(design: CsrDesignModel) -> None:
                     f"field '{fld.node.get_path()}': riscv_priv must be m/s/u "
                     f"(got {fld.priv!r})"
                 )
+            # save_on_trap writes INTO the field via the CSR file's hwif_in,
+            # so the field must be hw_writable (`hw = w` or `hw = rw`).
+            if fld.save_on_trap and not fld.hw_writable:
+                raise UnsupportedRdlError(
+                    f"field '{fld.node.get_path()}': riscv_save_on_trap "
+                    f"requires `hw = w` or `hw = rw` — the trap coordinator "
+                    f"writes the saved value via hwif_in, which only exists "
+                    f"for hw-writable fields"
+                )
