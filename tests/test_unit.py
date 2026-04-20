@@ -19,6 +19,52 @@ def _compile_rdl(tmp_path, source: str):
     return rdlc.elaborate().top
 
 
+def test_riscv_csr_addr_udp_overrides_rdl_byte_addr(tmp_path) -> None:
+    """`riscv_csr_addr` wins over RDL `@` — scanner reads the UDP."""
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0x300;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mstatus @ 0x0;       // RDL byte address ignored
+            reg {
+                riscv_csr_addr = 0x305;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mtvec @ 0x4;
+        };
+    """)
+    d = scan(top)
+    assert [r.address for r in d.regs] == [0x300, 0x305]
+
+
+def test_legacy_byte_address_fallback(tmp_path) -> None:
+    """Without `riscv_csr_addr`, scanner falls back to `byte_addr >> 2`."""
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } r0 @ 0xC00;           // CSR 0x300 under old convention
+        };
+    """)
+    d = scan(top)
+    assert d.regs[0].address == 0x300
+
+
+def test_default_priv_at_addrmap(tmp_path) -> None:
+    """`default riscv_priv = "m";` at addrmap propagates to descendant regs."""
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0x300;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mstatus @ 0x0;
+        };
+    """)
+    d = scan(top)
+    assert d.regs[0].priv == "m"
+
+
 def test_parse_warl_mask() -> None:
     assert parse_warl("0x1F") == ("mask", 0x1F)
     assert parse_warl("0b101") == ("mask", 0b101)
@@ -88,6 +134,66 @@ def test_access_controller_no_overrides(tmp_path) -> None:
     src = emit_access_controller(d, "TCsrAccess")
     assert "let min_priv: UInt<2> = csr_addr[9:8];" in src
     assert "match csr_addr" not in src
+
+
+def test_trap_coord_save_on_trap_port_and_mux(tmp_path) -> None:
+    from rdl2arch_riscv.emit_trap_coordinator import emit_trap_coordinator
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0x341;
+                field { sw = rw; hw = rw; reset = 0;
+                        riscv_save_on_trap = true; } epc[31:0];
+            } mepc @ 0x0;
+            reg {
+                riscv_csr_addr = 0x340;
+                field { sw = rw; hw = r; reset = 0; } value[31:0];
+            } mscratch @ 0x4;
+        };
+    """)
+    d = scan(top)
+    src = emit_trap_coordinator(d, "TCsrTrapCoord")
+    # save_on_trap field → save_<member> port declared
+    assert "port save_mepc_epc: in UInt<32>;" in src
+    # save_on_trap field gets the trap_enter mux
+    assert "trap_enter ? save_mepc_epc : hwif_in_live.mepc_epc" in src
+    # mscratch.value is hw=r (not writable) → not in hwif_in at all
+    assert "mscratch_value" not in src
+
+
+def test_trap_coord_no_save_fields_still_compiles(tmp_path) -> None:
+    from rdl2arch_riscv.emit_trap_coordinator import emit_trap_coordinator
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0x340;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mscratch @ 0x0;
+        };
+    """)
+    d = scan(top)
+    src = emit_trap_coordinator(d, "TCsrTrapCoord")
+    # No save_on_trap fields, no save_ ports, no trap_enter mux.
+    assert "save_" not in src
+    assert "trap_enter ?" not in src
+    # Still legal ARCH: the HwifIn has only `_reserved` in this case.
+    assert "hwif_in_drive._reserved" in src
+
+
+def test_validate_rejects_save_on_trap_without_hw_writable(tmp_path) -> None:
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0x341;
+                field { sw = rw; hw = r; reset = 0;
+                        riscv_save_on_trap = true; } epc[31:0];
+            } mepc @ 0x0;
+        };
+    """)
+    d = scan(top)
+    with pytest.raises(UnsupportedRdlError, match="riscv_save_on_trap"):
+        validate(d)
 
 
 def test_validate_rejects_wpri_and_warl_together(tmp_path) -> None:
