@@ -1,14 +1,9 @@
 use PrivOverrideCsrFilePkg;
 
 module PrivOverrideCsrFile
-  port clk:          in Clock<SysDomain>;
-  port rst:          in Reset<Sync>;
-  port csr_addr:     in UInt<12>;
-  port csr_write_en: in Bool;
-  port csr_read_en:  in Bool;
-  port csr_op:       in UInt<2>;
-  port csr_wdata:    in UInt<32>;
-  port csr_rdata:    out UInt<32>;
+  port clk: in Clock<SysDomain>;
+  port rst: in Reset<Sync>;
+  port csr: target PrivOverrideCsrFileBus;
   port hwif_in:  in PrivOverrideCsrFileHwifIn;
   port hwif_out: out PrivOverrideCsrFileHwifOut;
 
@@ -18,27 +13,27 @@ module PrivOverrideCsrFile
   reg debug_peek_r: DebugPeekReg reset rst => DebugPeekReg { v: 0 };
 
 
-  let csr_rdata_mux: UInt<32> = match csr_addr
+  let csr_rdata_mux: UInt<32> = match csr.addr
     12'h300 => mstatus_r.v,
     12'h301 => debug_peek_r.v,
     _ => 0
   end match;
 
   seq
-    if csr_write_en
-      if csr_addr == 12'h300
-        mstatus_r.v <= match csr_op
-            2'b01 => csr_wdata[31:0],
-            2'b10 => mstatus_r.v | csr_wdata[31:0],
-            2'b11 => mstatus_r.v & (~csr_wdata[31:0]),
+    if csr.write_en
+      if csr.addr == 12'h300
+        mstatus_r.v <= match csr.op
+            2'b01 => csr.wdata[31:0],
+            2'b10 => mstatus_r.v | csr.wdata[31:0],
+            2'b11 => mstatus_r.v & (~csr.wdata[31:0]),
             _    => mstatus_r.v
           end match;
       end if
-      if csr_addr == 12'h301
-        debug_peek_r.v <= match csr_op
-            2'b01 => csr_wdata[31:0],
-            2'b10 => debug_peek_r.v | csr_wdata[31:0],
-            2'b11 => debug_peek_r.v & (~csr_wdata[31:0]),
+      if csr.addr == 12'h301
+        debug_peek_r.v <= match csr.op
+            2'b01 => csr.wdata[31:0],
+            2'b10 => debug_peek_r.v | csr.wdata[31:0],
+            2'b11 => debug_peek_r.v & (~csr.wdata[31:0]),
             _    => debug_peek_r.v
           end match;
       end if
@@ -46,7 +41,7 @@ module PrivOverrideCsrFile
   end seq
 
   comb
-    csr_rdata = csr_read_en ? csr_rdata_mux : 0;
+    csr.rdata = csr.read_en ? csr_rdata_mux : 0;
     hwif_out.mstatus_v = mstatus_r.v;
     hwif_out.debug_peek_v = debug_peek_r.v;
   end comb

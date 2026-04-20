@@ -109,8 +109,11 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
         lines.append(f"  port {sig}: out Bool;")
     lines.append("")
 
-    # Internal wires. The CSR file's `csr_op` is UInt<2> (low 2 bits of the
-    # funct3 opcode), so compute once in a wire.
+    # Internal wires. All flat — ARCH only permits bus types on ports, not
+    # on `wire` declarations. The CSR file's bus port is bound per-field
+    # inside its `inst` block so this top can interpose write_en/read_en
+    # with the access controller's `granted` rather than passing them
+    # through untouched from the pipeline.
     lines.append("  wire granted_w: Bool;")
     lines.append("  wire illegal_w: Bool;")
     lines.append("  wire cause_w:   UInt<5>;")
@@ -124,10 +127,8 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
         lines.append(f"  wire {sig}_w: Bool;")
     lines.append("")
 
-    # Tie hwif_in_live to all-zeros. In a real pipeline, non-trap hw writes
-    # would come from here (e.g. MIE toggling on MRET); tests that don't
-    # exercise that path see all-zero drives from the trap coordinator when
-    # `trap_enter` is low.
+    # Tie hwif_in_live to all-zeros, derive csr_op_w and write_en_w, fan
+    # rsp wires back to flat top-level outputs.
     lines.append("  comb")
     for member, _w in hwif_in_members:
         lines.append(f"    hwif_live_w.{member} = 0;")
@@ -144,7 +145,7 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("  end comb")
     lines.append("")
 
-    # Access controller.
+    # Access controller (flat ports).
     lines.append(f"  inst access: {access_mod}")
     lines.append("    csr_addr   <- csr_addr;")
     lines.append("    csr_opcode <- csr_opcode;")
@@ -168,15 +169,18 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("  end inst trap")
     lines.append("")
 
-    # CSR file.
+    # CSR file — bus port bound per-field. Individual field bindings let
+    # the top drive write_en/read_en from the access controller's
+    # `granted`; a whole-bus passthrough would expose those signals to
+    # the pipeline instead, losing internal gating.
     lines.append(f"  inst csr: {csr_mod}")
     lines.append("    clk <- clk; rst <- rst;")
-    lines.append("    csr_addr     <- csr_addr;")
-    lines.append("    csr_op       <- csr_op_w;")
-    lines.append("    csr_write_en <- write_en_w;")
-    lines.append("    csr_read_en  <- granted_w;")
-    lines.append("    csr_wdata    <- csr_wdata;")
-    lines.append("    csr_rdata    -> rdata_w;")
+    lines.append("    csr.addr     <- csr_addr;")
+    lines.append("    csr.op       <- csr_op_w;")
+    lines.append("    csr.write_en <- write_en_w;")
+    lines.append("    csr.read_en  <- granted_w;")
+    lines.append("    csr.wdata    <- csr_wdata;")
+    lines.append("    csr.rdata    -> rdata_w;")
     for sig in sigs:
         lines.append(f"    {sig} -> {sig}_w;")
     lines.append("    hwif_in  <- hwif_drive_w;")

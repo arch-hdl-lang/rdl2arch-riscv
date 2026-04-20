@@ -56,12 +56,12 @@ module PrivOverrideRiscvTop
 
   inst csr: PrivOverrideCsrFile
     clk <- clk; rst <- rst;
-    csr_addr     <- csr_addr;
-    csr_op       <- csr_op_w;
-    csr_write_en <- write_en_w;
-    csr_read_en  <- granted_w;
-    csr_wdata    <- csr_wdata;
-    csr_rdata    -> rdata_w;
+    csr.addr     <- csr_addr;
+    csr.op       <- csr_op_w;
+    csr.write_en <- write_en_w;
+    csr.read_en  <- granted_w;
+    csr.wdata    <- csr_wdata;
+    csr.rdata    -> rdata_w;
     hwif_in  <- hwif_drive_w;
     hwif_out -> hwif_out_w;
   end inst csr

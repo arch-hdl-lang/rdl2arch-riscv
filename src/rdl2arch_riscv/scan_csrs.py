@@ -57,6 +57,7 @@ class CsrDesignModel:
     hwif_in_struct: str
     hwif_out_struct: str
     csr_enum_name: str
+    csr_file_bus: str             # bus type: CSR file's pipeline interface
     xlen: int                     # RV32 → 32, RV64 → 64
     regs: list[CsrRegModel] = field(default_factory=list)
 
@@ -71,6 +72,10 @@ def scan(top: AddrmapNode, *, module_name: Optional[str] = None,
     for reg in _walk_regs(top):
         regs.append(_scan_reg(reg, top))
 
+    # Module-name convention: CSR-file module is `<Base>CsrFile`. Strip that
+    # suffix to build sibling names for the buses so they key off the design
+    # rather than one module's name.
+    base = mod[: -len("CsrFile")] if mod.endswith("CsrFile") else mod
     return CsrDesignModel(
         top=top,
         module_name=mod,
@@ -78,6 +83,7 @@ def scan(top: AddrmapNode, *, module_name: Optional[str] = None,
         hwif_in_struct=mod + "HwifIn",
         hwif_out_struct=mod + "HwifOut",
         csr_enum_name=mod + "Addr",
+        csr_file_bus=base + "CsrFileBus",
         xlen=xlen,
         regs=regs,
     )
