@@ -53,11 +53,11 @@ def top_so(arch_bin, tmp_path_factory):
 
 def _idle(dut) -> None:
     """Default line state between ops: no CSR instruction in flight."""
-    dut.csr_addr = 0
+    dut.csr_cmd_valid = 0
+    dut.csr_cmd_addr = 0
+    dut.csr_cmd_wdata = 0
     dut.csr_opcode = OP_NONE
-    dut.csr_wdata = 0
     dut.cur_priv = PRIV_M
-    dut.valid = 0
     dut.trap_enter = 0
     dut.save_mstatus_mpie = 0
     dut.save_mstatus_mpp = 0
@@ -68,25 +68,25 @@ def _idle(dut) -> None:
 
 def _issue(dut, *, addr: int, opcode: int, wdata: int = 0,
            priv: int = PRIV_M) -> None:
-    """Assert a CSR op for one cycle, then idle."""
-    dut.csr_addr = addr
+    """Assert a CSR op for one cycle via the cmd handshake, then idle."""
+    dut.csr_cmd_addr = addr
     dut.csr_opcode = opcode
-    dut.csr_wdata = wdata
+    dut.csr_cmd_wdata = wdata
     dut.cur_priv = priv
-    dut.valid = 1
+    dut.csr_cmd_valid = 1
     tick(dut)
     _idle(dut)
 
 
 def _read(dut, addr: int, *, priv: int = PRIV_M) -> int:
-    """Combinational read — csr_rdata is comb on csr_addr + granted."""
-    dut.csr_addr = addr
+    """Combinational read — rsp_rdata fires same cycle as cmd_valid."""
+    dut.csr_cmd_addr = addr
     dut.csr_opcode = OP_NONE
-    dut.csr_wdata = 0
+    dut.csr_cmd_wdata = 0
     dut.cur_priv = priv
-    dut.valid = 1
+    dut.csr_cmd_valid = 1
     dut.eval_comb()
-    data = dut.csr_rdata
+    data = dut.csr_rsp_rdata
     _idle(dut)
     dut.eval_comb()
     return data
@@ -109,11 +109,11 @@ def test_priv_fault_leaves_state_unchanged(top_so) -> None:
     # Prime with a known value under M-priv.
     _issue(dut, addr=MSCRATCH, opcode=OP_WRITE, wdata=0xDEAD_BEEF, priv=PRIV_M)
     # Attempt a write under S-priv. Observe `illegal` combinationally.
-    dut.csr_addr = MSCRATCH
+    dut.csr_cmd_addr = MSCRATCH
     dut.csr_opcode = OP_WRITE
-    dut.csr_wdata = 0xBAD_BAD0 & 0xFFFFFFFF
+    dut.csr_cmd_wdata = 0xBAD_BAD0 & 0xFFFFFFFF
     dut.cur_priv = PRIV_S
-    dut.valid = 1
+    dut.csr_cmd_valid = 1
     dut.eval_comb()
     assert dut.granted == 0
     assert dut.illegal == 1
@@ -133,11 +133,11 @@ def test_read_only_addr_blocks_write_but_not_read(top_so) -> None:
     val = _read(dut, 0xC00, priv=PRIV_M)
     assert val == 0, f"unimplemented RO addr should mux to 0; got {val:#x}"
     # Attempt a CSRRW into the same RO address — access controller must deny.
-    dut.csr_addr = 0xC00
+    dut.csr_cmd_addr = 0xC00
     dut.csr_opcode = OP_WRITE
-    dut.csr_wdata = 0x1234_5678
+    dut.csr_cmd_wdata = 0x1234_5678
     dut.cur_priv = PRIV_M
-    dut.valid = 1
+    dut.csr_cmd_valid = 1
     dut.eval_comb()
     assert dut.granted == 0 and dut.illegal == 1
 
@@ -185,7 +185,7 @@ def test_trap_enter_does_not_fire_csr_write(top_so) -> None:
     # Trap entry — no CSR op asserted.
     dut.save_mepc_epc = 0x1000
     dut.trap_enter = 1
-    dut.valid = 0
+    dut.csr_cmd_valid = 0
     tick(dut); _idle(dut)
     # mscratch unchanged, mepc took the snapshot.
     assert _read(dut, MSCRATCH, priv=PRIV_M) == 0xCAFE_F00D

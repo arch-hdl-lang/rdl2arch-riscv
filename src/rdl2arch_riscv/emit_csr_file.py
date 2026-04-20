@@ -1,15 +1,29 @@
 """Emit the top CSR-file ARCH module.
 
-Pipeline-facing interface is a `target <Name>CsrFileBus` port. The bus
-bundles the CSR access signals; directions below are from the
-pipeline's (initiator's) perspective:
+Pipeline-facing interface is a `target <Name>CsrFileBus` port with two
+handshake channels. Directions below are from the pipeline's
+(initiator's) perspective:
 
-  csr.addr:     out UInt<12>
-  csr.write_en: out Bool      — granted by the access controller
-  csr.read_en:  out Bool      — granted by the access controller
-  csr.op:       out UInt<2>   — 00=read-only, 01=write, 10=set, 11=clear
-  csr.wdata:    out UInt<XLEN>
-  csr.rdata:    in  UInt<XLEN>
+  cmd (send, valid_ready)   — pipeline requests a CSR op
+    csr.cmd_valid: out Bool
+    csr.cmd_ready: in  Bool   — CSR file asserts when it can accept
+    csr.cmd_addr:  out UInt<12>
+    csr.cmd_op:    out UInt<2>    — 00=read-only, 01=write, 10=set, 11=clear
+    csr.cmd_wdata: out UInt<XLEN>
+
+  rsp (receive, valid_only) — CSR file returns rdata to pipeline
+    csr.rsp_valid: in  Bool   — drives whenever a cmd was accepted
+    csr.rsp_rdata: in  UInt<XLEN>
+
+The access controller's verdict feeds in via a separate flat `granted`
+port: on a handshake fire, writes to state only land if `granted` is
+high. Illegal accesses still get a rsp beat (with rdata from the
+default mux arm) so the pipeline's retire stage can observe the
+transaction without separately handshaking for the illegal case.
+
+In this implementation `cmd_ready` is tied true — every cmd is accepted
+in one cycle. A future variant could gate this on e.g. HPM counter
+state to model slow CSRs.
 
 Plus one `<signal>_pulse: out Bool` port per distinct `riscv_trap_signal`
 value and hwif_in/hwif_out structs for hw-driven fields.
@@ -47,8 +61,8 @@ def _ones_lit(w: int) -> str:
 def _wdata_slice(field: CsrFieldModel) -> str:
     """Extract `wdata[msb:lsb]` to get this field's new-value slice."""
     if field.width == 1:
-        return f"csr.wdata[{field.lsb}]"
-    return f"csr.wdata[{field.msb}:{field.lsb}]"
+        return f"csr.cmd_wdata[{field.lsb}]"
+    return f"csr.cmd_wdata[{field.msb}:{field.lsb}]"
 
 
 def _reset_struct_literal(reg: CsrRegModel) -> str:
@@ -63,7 +77,7 @@ def _opcode_match_lines(field: CsrFieldModel, old_ref: str) -> list[str]:
     """
     slice_expr = _wdata_slice(field)
     return [
-        "match csr.op",
+        "match csr.cmd_op",
         f"  2'b01 => {slice_expr},",
         f"  2'b10 => {old_ref} | {slice_expr},",
         f"  2'b11 => {old_ref} & (~{slice_expr}),",
@@ -142,6 +156,7 @@ def emit_csr_file(design: CsrDesignModel) -> str:
     lines.append("  port clk: in Clock<SysDomain>;")
     lines.append("  port rst: in Reset<Sync>;")
     lines.append(f"  port csr: target {design.csr_file_bus};")
+    lines.append("  port granted: in Bool;")
 
     # One named-pulse output per distinct riscv_trap_signal value.
     trap_signals = sorted({
@@ -169,9 +184,9 @@ def emit_csr_file(design: CsrDesignModel) -> str:
         lines.append(f"  reg {sig}_r: Bool reset rst => false;")
     lines.append("")
 
-    # Combinational readback mux: match on csr.addr against each CSR's 12-bit
-    # RISC-V address; value is the packed read-view of the register.
-    lines.append(f"  let csr_rdata_mux: UInt<{xlen}> = match csr.addr")
+    # Combinational readback mux: match on csr.cmd_addr against each CSR's
+    # 12-bit RISC-V address; value is the packed read-view of the register.
+    lines.append(f"  let csr_rdata_mux: UInt<{xlen}> = match csr.cmd_addr")
     for reg in design.regs:
         expr = _reg_read_expr(reg, xlen)
         lines.append(f"    12'h{reg.address:x} => {expr},")
@@ -217,17 +232,24 @@ def emit_csr_file(design: CsrDesignModel) -> str:
             per_reg_writes.append((reg, block))
 
     if per_reg_writes:
-        lines.append("    if csr.write_en")
+        # A write fires only on a handshake beat with granted access and a
+        # non-read-only opcode. `cmd_ready` is tied true in this emitter, so
+        # the fire condition collapses to `cmd_valid && granted && op != 0`.
+        # Nest `cmd_valid` first so the cmd_op / cmd_addr reads are clearly
+        # inside a valid-guard (satisfies the arch linter's handshake-payload
+        # staleness check).
+        lines.append("    if csr.cmd_valid")
+        lines.append("      if granted and (csr.cmd_op != 2'b00)")
         for reg, block in per_reg_writes:
-            lines.append(f"      if csr.addr == 12'h{reg.address:x}")
-            # First line of each statement starts at 8-space indent; its
-            # continuation lines go 2 more in (10 spaces). Each top-level
+            lines.append(f"        if csr.cmd_addr == 12'h{reg.address:x}")
+            # First line of each statement starts at 10-space indent; its
+            # continuation lines go 2 more in (12 spaces). Each top-level
             # statement in `block` either begins with `<lhs> <=` (start of a
             # new assign) or `<signal>_r <= true;` (atomic one-liner). We
             # detect statement starts by whether the line contains ` <= `
             # at the top (the `match csr_op` et al continuation lines don't).
-            stmt_indent = " " * 8
-            cont_indent = " " * 10
+            stmt_indent = " " * 10
+            cont_indent = " " * 12
             for ln in block:
                 if " <= " in ln and not ln.startswith(" "):
                     lines.append(stmt_indent + ln)
@@ -235,15 +257,20 @@ def emit_csr_file(design: CsrDesignModel) -> str:
                     lines.append(cont_indent + ln)
                 else:
                     lines.append(cont_indent + ln)
-            lines.append(f"      end if")
+            lines.append(f"        end if")
+        lines.append("      end if")
         lines.append("    end if")
 
     lines.append("  end seq")
     lines.append("")
 
-    # Comb block: drive csr.rdata, trap-signal pulses, hwif_out.
+    # Comb block: drive handshake signals, trap-signal pulses, hwif_out.
+    # `cmd_ready` is tied true — every cmd accepted in one cycle. `rsp`
+    # fires the same cycle as the cmd (single-beat same-cycle response).
     lines.append("  comb")
-    lines.append("    csr.rdata = csr.read_en ? csr_rdata_mux : 0;")
+    lines.append("    csr.cmd_ready = true;")
+    lines.append("    csr.rsp_valid = csr.cmd_valid;")
+    lines.append("    csr.rsp_rdata = csr.cmd_valid ? csr_rdata_mux : 0;")
     for sig in trap_signals:
         lines.append(f"    {sig} = {sig}_r;")
     for reg in design.regs:

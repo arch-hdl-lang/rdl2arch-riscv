@@ -91,12 +91,21 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("  port clk: in Clock<SysDomain>;")
     lines.append("  port rst: in Reset<Sync>;")
     lines.append("")
-    lines.append("  port csr_addr:   in UInt<12>;")
-    lines.append("  port csr_opcode: in UInt<3>;")
-    lines.append(f"  port csr_wdata:  in UInt<{xlen}>;")
-    lines.append("  port cur_priv:   in UInt<2>;")
-    lines.append("  port valid:      in Bool;")
-    lines.append("  port trap_enter: in Bool;")
+    # Pipeline-facing cmd handshake (flat for test driveability — the
+    # downstream CSR file's bus port is bound per-field from these).
+    # `csr_cmd_op` is derived from `csr_opcode[1:0]` inside this top, so
+    # the pipeline only needs to drive one opcode signal.
+    lines.append("  port csr_cmd_valid: in  Bool;")
+    lines.append("  port csr_cmd_ready: out Bool;")
+    lines.append("  port csr_cmd_addr:  in  UInt<12>;")
+    lines.append(f"  port csr_cmd_wdata: in  UInt<{xlen}>;")
+    lines.append("  port csr_rsp_valid: out Bool;")
+    lines.append(f"  port csr_rsp_rdata: out UInt<{xlen}>;")
+    # The access controller wants all 3 bits of funct3 to distinguish
+    # r/w/rs/rc.
+    lines.append("  port csr_opcode: in  UInt<3>;")
+    lines.append("  port cur_priv:   in  UInt<2>;")
+    lines.append("  port trap_enter: in  Bool;")
     for _reg, _fld, width in save:
         port = f"save_{_reg}_{_fld}"
         lines.append(f"  port {port}: in UInt<{width}>;")
@@ -104,22 +113,20 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("  port granted:    out Bool;")
     lines.append("  port illegal:    out Bool;")
     lines.append("  port cause:      out UInt<5>;")
-    lines.append(f"  port csr_rdata:  out UInt<{xlen}>;")
     for sig in sigs:
         lines.append(f"  port {sig}: out Bool;")
     lines.append("")
 
     # Internal wires. All flat — ARCH only permits bus types on ports, not
     # on `wire` declarations. The CSR file's bus port is bound per-field
-    # inside its `inst` block so this top can interpose write_en/read_en
-    # with the access controller's `granted` rather than passing them
-    # through untouched from the pipeline.
+    # inside its `inst` block.
     lines.append("  wire granted_w: Bool;")
     lines.append("  wire illegal_w: Bool;")
     lines.append("  wire cause_w:   UInt<5>;")
-    lines.append(f"  wire rdata_w:   UInt<{xlen}>;")
-    lines.append("  wire csr_op_w:  UInt<2>;")
-    lines.append("  wire write_en_w: Bool;")
+    lines.append("  wire cmd_ready_w: Bool;")
+    lines.append("  wire cmd_op_w:   UInt<2>;")
+    lines.append("  wire rsp_valid_w: Bool;")
+    lines.append(f"  wire rsp_rdata_w: UInt<{xlen}>;")
     lines.append(f"  wire hwif_live_w:  {design.hwif_in_struct};")
     lines.append(f"  wire hwif_drive_w: {design.hwif_in_struct};")
     lines.append(f"  wire hwif_out_w:   {design.hwif_out_struct};")
@@ -127,19 +134,19 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
         lines.append(f"  wire {sig}_w: Bool;")
     lines.append("")
 
-    # Tie hwif_in_live to all-zeros, derive csr_op_w and write_en_w, fan
-    # rsp wires back to flat top-level outputs.
+    # Tie hwif_in_live to all-zeros and fan internal wires back to flat
+    # top-level outputs.
     lines.append("  comb")
     for member, _w in hwif_in_members:
         lines.append(f"    hwif_live_w.{member} = 0;")
     lines.append("")
-    lines.append("    csr_op_w = csr_opcode[1:0];")
-    lines.append("    write_en_w = granted_w and (csr_op_w != 2'b00);")
-    lines.append("")
+    lines.append("    cmd_op_w = csr_opcode[1:0];")
+    lines.append("    csr_cmd_ready = cmd_ready_w;")
+    lines.append("    csr_rsp_valid = rsp_valid_w;")
+    lines.append("    csr_rsp_rdata = rsp_rdata_w;")
     lines.append("    granted = granted_w;")
     lines.append("    illegal = illegal_w;")
     lines.append("    cause   = cause_w;")
-    lines.append("    csr_rdata = rdata_w;")
     for sig in sigs:
         lines.append(f"    {sig} = {sig}_w;")
     lines.append("  end comb")
@@ -147,10 +154,10 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
 
     # Access controller (flat ports).
     lines.append(f"  inst access: {access_mod}")
-    lines.append("    csr_addr   <- csr_addr;")
+    lines.append("    csr_addr   <- csr_cmd_addr;")
     lines.append("    csr_opcode <- csr_opcode;")
     lines.append("    cur_priv   <- cur_priv;")
-    lines.append("    valid      <- valid;")
+    lines.append("    valid      <- csr_cmd_valid;")
     lines.append("    granted    -> granted_w;")
     lines.append("    illegal    -> illegal_w;")
     lines.append("    cause      -> cause_w;")
@@ -169,18 +176,19 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("  end inst trap")
     lines.append("")
 
-    # CSR file — bus port bound per-field. Individual field bindings let
-    # the top drive write_en/read_en from the access controller's
-    # `granted`; a whole-bus passthrough would expose those signals to
-    # the pipeline instead, losing internal gating.
+    # CSR file — bus port bound per-field. The `granted` input comes
+    # from the access controller's flat output. Individual field binding
+    # lets the top interpose on handshake signals if needed.
     lines.append(f"  inst csr: {csr_mod}")
     lines.append("    clk <- clk; rst <- rst;")
-    lines.append("    csr.addr     <- csr_addr;")
-    lines.append("    csr.op       <- csr_op_w;")
-    lines.append("    csr.write_en <- write_en_w;")
-    lines.append("    csr.read_en  <- granted_w;")
-    lines.append("    csr.wdata    <- csr_wdata;")
-    lines.append("    csr.rdata    -> rdata_w;")
+    lines.append("    csr.cmd_valid <- csr_cmd_valid;")
+    lines.append("    csr.cmd_ready -> cmd_ready_w;")
+    lines.append("    csr.cmd_addr  <- csr_cmd_addr;")
+    lines.append("    csr.cmd_op    <- cmd_op_w;")
+    lines.append("    csr.cmd_wdata <- csr_cmd_wdata;")
+    lines.append("    csr.rsp_valid -> rsp_valid_w;")
+    lines.append("    csr.rsp_rdata -> rsp_rdata_w;")
+    lines.append("    granted <- granted_w;")
     for sig in sigs:
         lines.append(f"    {sig} -> {sig}_w;")
     lines.append("    hwif_in  <- hwif_drive_w;")

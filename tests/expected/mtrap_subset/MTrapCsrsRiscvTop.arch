@@ -4,12 +4,15 @@ module MTrapCsrsRiscvTop
   port clk: in Clock<SysDomain>;
   port rst: in Reset<Sync>;
 
-  port csr_addr:   in UInt<12>;
-  port csr_opcode: in UInt<3>;
-  port csr_wdata:  in UInt<32>;
-  port cur_priv:   in UInt<2>;
-  port valid:      in Bool;
-  port trap_enter: in Bool;
+  port csr_cmd_valid: in  Bool;
+  port csr_cmd_ready: out Bool;
+  port csr_cmd_addr:  in  UInt<12>;
+  port csr_cmd_wdata: in  UInt<32>;
+  port csr_rsp_valid: out Bool;
+  port csr_rsp_rdata: out UInt<32>;
+  port csr_opcode: in  UInt<3>;
+  port cur_priv:   in  UInt<2>;
+  port trap_enter: in  Bool;
   port save_mstatus_mpie: in UInt<1>;
   port save_mstatus_mpp: in UInt<2>;
   port save_mepc_epc: in UInt<32>;
@@ -19,15 +22,15 @@ module MTrapCsrsRiscvTop
   port granted:    out Bool;
   port illegal:    out Bool;
   port cause:      out UInt<5>;
-  port csr_rdata:  out UInt<32>;
   port mtvec_write: out Bool;
 
   wire granted_w: Bool;
   wire illegal_w: Bool;
   wire cause_w:   UInt<5>;
-  wire rdata_w:   UInt<32>;
-  wire csr_op_w:  UInt<2>;
-  wire write_en_w: Bool;
+  wire cmd_ready_w: Bool;
+  wire cmd_op_w:   UInt<2>;
+  wire rsp_valid_w: Bool;
+  wire rsp_rdata_w: UInt<32>;
   wire hwif_live_w:  MTrapCsrsCsrFileHwifIn;
   wire hwif_drive_w: MTrapCsrsCsrFileHwifIn;
   wire hwif_out_w:   MTrapCsrsCsrFileHwifOut;
@@ -45,21 +48,21 @@ module MTrapCsrsRiscvTop
     hwif_live_w.mcause_cause = 0;
     hwif_live_w.mtval_tval = 0;
 
-    csr_op_w = csr_opcode[1:0];
-    write_en_w = granted_w and (csr_op_w != 2'b00);
-
+    cmd_op_w = csr_opcode[1:0];
+    csr_cmd_ready = cmd_ready_w;
+    csr_rsp_valid = rsp_valid_w;
+    csr_rsp_rdata = rsp_rdata_w;
     granted = granted_w;
     illegal = illegal_w;
     cause   = cause_w;
-    csr_rdata = rdata_w;
     mtvec_write = mtvec_write_w;
   end comb
 
   inst access: MTrapCsrsCsrAccess
-    csr_addr   <- csr_addr;
+    csr_addr   <- csr_cmd_addr;
     csr_opcode <- csr_opcode;
     cur_priv   <- cur_priv;
-    valid      <- valid;
+    valid      <- csr_cmd_valid;
     granted    -> granted_w;
     illegal    -> illegal_w;
     cause      -> cause_w;
@@ -79,12 +82,14 @@ module MTrapCsrsRiscvTop
 
   inst csr: MTrapCsrsCsrFile
     clk <- clk; rst <- rst;
-    csr.addr     <- csr_addr;
-    csr.op       <- csr_op_w;
-    csr.write_en <- write_en_w;
-    csr.read_en  <- granted_w;
-    csr.wdata    <- csr_wdata;
-    csr.rdata    -> rdata_w;
+    csr.cmd_valid <- csr_cmd_valid;
+    csr.cmd_ready -> cmd_ready_w;
+    csr.cmd_addr  <- csr_cmd_addr;
+    csr.cmd_op    <- cmd_op_w;
+    csr.cmd_wdata <- csr_cmd_wdata;
+    csr.rsp_valid -> rsp_valid_w;
+    csr.rsp_rdata -> rsp_rdata_w;
+    granted <- granted_w;
     mtvec_write -> mtvec_write_w;
     hwif_in  <- hwif_drive_w;
     hwif_out -> hwif_out_w;

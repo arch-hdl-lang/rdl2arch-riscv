@@ -23,12 +23,15 @@ package PrivOverrideCsrFilePkg
   end struct PrivOverrideCsrFileHwifOut
 
   bus PrivOverrideCsrFileBus
-    addr:     out UInt<12>;
-    op:       out UInt<2>;
-    write_en: out Bool;
-    read_en:  out Bool;
-    wdata:    out UInt<32>;
-    rdata:    in  UInt<32>;
+    handshake cmd: send kind: valid_ready
+      addr:  UInt<12>;
+      op:    UInt<2>;
+      wdata: UInt<32>;
+    end handshake cmd
+
+    handshake rsp: receive kind: valid_only
+      rdata: UInt<32>;
+    end handshake rsp
   end bus PrivOverrideCsrFileBus
 
 end package PrivOverrideCsrFilePkg

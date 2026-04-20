@@ -157,16 +157,22 @@ def test_hwif_in_drives_hw_writable_field(csr_so) -> None:
         "hwif_in should drive mepc.epc when no sw write fires"
 
 
-def test_read_enable_gates_rdata(csr_so) -> None:
-    """`csr_rdata = csr_read_en ? mux : 0` — with read_en low, rdata is 0."""
+def test_rsp_valid_gates_rdata(csr_so) -> None:
+    """rsp_valid follows cmd_valid (same-cycle valid_only handshake) and
+    rsp_rdata is gated by cmd_valid — zero when no cmd is in flight."""
     dut = fresh_dut(csr_so)
     reset(dut)
     drv = CsrPipelineDriver(dut)
     drv.write(MSCRATCH, 0xABCD_1234)
-    dut.csr_addr = MSCRATCH
-    dut.csr_read_en = 0
+    # No cmd in flight: rsp_valid is low, rsp_rdata reads 0.
+    dut.csr_cmd_addr = MSCRATCH
+    dut.csr_cmd_op = 0
+    dut.csr_cmd_valid = 0
     dut.eval_comb()
-    assert dut.csr_rdata == 0, "csr_rdata must be gated by csr_read_en"
-    dut.csr_read_en = 1
+    assert dut.csr_rsp_valid == 0
+    assert dut.csr_rsp_rdata == 0, "rsp_rdata should be 0 without a valid cmd"
+    # Assert cmd: rsp_valid fires same cycle with rdata from the addr mux.
+    dut.csr_cmd_valid = 1
     dut.eval_comb()
-    assert dut.csr_rdata == 0xABCD_1234
+    assert dut.csr_rsp_valid == 1
+    assert dut.csr_rsp_rdata == 0xABCD_1234
