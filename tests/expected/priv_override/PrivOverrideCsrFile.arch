@@ -4,6 +4,7 @@ module PrivOverrideCsrFile
   port clk: in Clock<SysDomain>;
   port rst: in Reset<Sync>;
   port csr: target PrivOverrideCsrFileBus;
+  port granted: in Bool;
   port hwif_in:  in PrivOverrideCsrFileHwifIn;
   port hwif_out: out PrivOverrideCsrFileHwifOut;
 
@@ -13,35 +14,39 @@ module PrivOverrideCsrFile
   reg debug_peek_r: DebugPeekReg reset rst => DebugPeekReg { v: 0 };
 
 
-  let csr_rdata_mux: UInt<32> = match csr.addr
+  let csr_rdata_mux: UInt<32> = match csr.cmd_addr
     12'h300 => mstatus_r.v,
     12'h301 => debug_peek_r.v,
     _ => 0
   end match;
 
   seq
-    if csr.write_en
-      if csr.addr == 12'h300
-        mstatus_r.v <= match csr.op
-            2'b01 => csr.wdata[31:0],
-            2'b10 => mstatus_r.v | csr.wdata[31:0],
-            2'b11 => mstatus_r.v & (~csr.wdata[31:0]),
-            _    => mstatus_r.v
-          end match;
-      end if
-      if csr.addr == 12'h301
-        debug_peek_r.v <= match csr.op
-            2'b01 => csr.wdata[31:0],
-            2'b10 => debug_peek_r.v | csr.wdata[31:0],
-            2'b11 => debug_peek_r.v & (~csr.wdata[31:0]),
-            _    => debug_peek_r.v
-          end match;
+    if csr.cmd_valid
+      if granted and (csr.cmd_op != 2'b00)
+        if csr.cmd_addr == 12'h300
+          mstatus_r.v <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mstatus_r.v | csr.cmd_wdata[31:0],
+              2'b11 => mstatus_r.v & (~csr.cmd_wdata[31:0]),
+              _    => mstatus_r.v
+            end match;
+        end if
+        if csr.cmd_addr == 12'h301
+          debug_peek_r.v <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => debug_peek_r.v | csr.cmd_wdata[31:0],
+              2'b11 => debug_peek_r.v & (~csr.cmd_wdata[31:0]),
+              _    => debug_peek_r.v
+            end match;
+        end if
       end if
     end if
   end seq
 
   comb
-    csr.rdata = csr.read_en ? csr_rdata_mux : 0;
+    csr.cmd_ready = true;
+    csr.rsp_valid = csr.cmd_valid;
+    csr.rsp_rdata = csr.cmd_valid ? csr_rdata_mux : 0;
     hwif_out.mstatus_v = mstatus_r.v;
     hwif_out.debug_peek_v = debug_peek_r.v;
   end comb

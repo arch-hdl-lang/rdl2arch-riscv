@@ -51,20 +51,38 @@ def emit_package(design: CsrDesignModel) -> str:
     lines.append(f"  end struct {design.hwif_out_struct}")
     lines.append("")
 
-    # Bus definition — bundles the CSR-file pipeline interface. Directions
-    # are written from the initiator's (pipeline's) perspective: `out`
-    # signals flow pipeline → CSR file, `in` signals flow CSR file →
-    # pipeline. Lives inside the package (arch-com >= 0.44 supports nested
-    # `bus`) so the interface type groups with the data types that define
-    # the same pipeline boundary.
+    # Bus definition — bundles the CSR-file pipeline interface with two
+    # handshake channels. Lives inside the package (arch-com >= 0.44
+    # supports nested `bus`) so the interface type groups with the data
+    # types that define the same pipeline boundary.
+    #
+    #   cmd (initiator → target, valid_ready): the pipeline requests a CSR
+    #     access. Target asserts cmd_ready to accept; handshake fires on
+    #     (cmd_valid && cmd_ready). Payload is addr/op/wdata.
+    #
+    #   rsp (target → initiator, valid_only): the CSR file returns rdata.
+    #     No ready because the pipeline is always assumed ready to consume
+    #     its CSR op result this cycle. Upgrade to valid_ready here if a
+    #     future downstream wants to backpressure.
+    #
+    # Directions are written from the initiator's (pipeline's) perspective.
+    #
+    # The access controller deliberately keeps flat ports: it produces
+    # `granted` as a flat output so the integrated top (or any wrapper)
+    # can consume it with a scalar wire alongside the handshake — the
+    # bus-wire support in arch >= 0.44 gives us room to simplify that
+    # further, but the current shape is what the existing tests expect.
     xlen = design.xlen
     lines.append(f"  bus {design.csr_file_bus}")
-    lines.append("    addr:     out UInt<12>;")
-    lines.append("    op:       out UInt<2>;")
-    lines.append("    write_en: out Bool;")
-    lines.append("    read_en:  out Bool;")
-    lines.append(f"    wdata:    out UInt<{xlen}>;")
-    lines.append(f"    rdata:    in  UInt<{xlen}>;")
+    lines.append("    handshake cmd: send kind: valid_ready")
+    lines.append("      addr:  UInt<12>;")
+    lines.append("      op:    UInt<2>;")
+    lines.append(f"      wdata: UInt<{xlen}>;")
+    lines.append("    end handshake cmd")
+    lines.append("")
+    lines.append("    handshake rsp: receive kind: valid_only")
+    lines.append(f"      rdata: UInt<{xlen}>;")
+    lines.append("    end handshake rsp")
     lines.append(f"  end bus {design.csr_file_bus}")
     lines.append("")
 
