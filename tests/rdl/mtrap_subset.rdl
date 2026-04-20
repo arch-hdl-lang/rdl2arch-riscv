@@ -1,0 +1,59 @@
+// Phase 1 fixture — M-mode trap-handling CSRs.
+//
+// Exercises every UDP on a focused subset:
+//   mstatus  — WPRI reserved bits, WARL MPP, save/restore lifecycle.
+//   mtvec    — WARL bitmask (mode[1:0] legal values), trap-signal pulse on write.
+//   mepc     — WARL bitmask (bit 0 always zero — IALIGN), save-on-trap.
+//   mcause   — plain, save-on-trap.
+//   mtval    — plain, save-on-trap.
+//   mscratch — plain, no RISC-V semantics beyond priv tag.
+
+addrmap m_trap_csrs {
+    reg {
+        // mstatus layout (RV32 subset):
+        //   [0]        WPRI (reserved)
+        //   [3]        MIE  — machine interrupt enable
+        //   [7]        MPIE — previous MIE (saved by trap entry, restored by MRET)
+        //   [12:11]    MPP  — previous privilege (WARL: 00 / 01 / 11, since S-mode
+        //              may not be implemented; here we pick the full set 00/01/11)
+        //   others     WPRI
+        field { sw = rw; hw = r; reset = 0x0; riscv_wpri = true;     } wpri_lo[0:0];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true;     } reserved_2_1[2:1];
+        field { sw = rw; hw = rw; reset = 0x0;                        } mie[3:3];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true;     } reserved_6_4[6:4];
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_save_on_trap = true; riscv_restore_on_ret = true; } mpie[7:7];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true;     } reserved_10_8[10:8];
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_warl = "0x3";
+                riscv_save_on_trap = true; riscv_restore_on_ret = true; } mpp[12:11];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true;     } wpri_hi[31:13];
+    } mstatus @ 0xC00;   // RISC-V CSR 0x300, byte-addressed in RDL (<<2)
+
+    reg {
+        // mtvec: base[31:2], mode[1:0]. mode is WARL with legal values {0, 1}.
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_warl = "0,1";
+                riscv_trap_signal = "mtvec_write"; } mode[1:0];
+        field { sw = rw; hw = r; reset = 0x0;      } base[31:2];
+    } mtvec @ 0xC14;   // RISC-V CSR 0x305
+
+    reg {
+        // mepc: bit 0 always zero (IALIGN=32 case), so mask = 0xFFFF_FFFE.
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_warl = "0xFFFFFFFE";
+                riscv_save_on_trap = true; } epc[31:0];
+    } mepc @ 0xD04;      // RISC-V CSR 0x341
+
+    reg {
+        field { sw = rw; hw = rw; reset = 0x0; riscv_save_on_trap = true; } cause[31:0];
+    } mcause @ 0xD08;    // RISC-V CSR 0x342
+
+    reg {
+        field { sw = rw; hw = rw; reset = 0x0; riscv_save_on_trap = true; } tval[31:0];
+    } mtval @ 0xD0C;     // RISC-V CSR 0x343
+
+    reg {
+        field { sw = rw; hw = r; reset = 0x0; } value[31:0];
+    } mscratch @ 0xD00;  // RISC-V CSR 0x340
+};

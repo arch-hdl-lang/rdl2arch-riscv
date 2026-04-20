@@ -1,0 +1,22 @@
+// Access-controller fixture: per-register riscv_priv overrides.
+//
+// RISC-V CSR addresses already encode minimum privilege in bits [9:8],
+// but RDL lets the user explicitly tag a register with a different
+// required privilege level. The access controller merges these
+// overrides into its `min_priv` match.
+
+addrmap priv_override {
+    // 0xC00 in RDL = RISC-V CSR 0x300 (machine mode per csr_addr[9:8]=11).
+    // No override — inherits M from the address bits.
+    reg {
+        field { sw = rw; hw = r; reset = 0x0; } v[31:0];
+    } mstatus @ 0xC00;
+
+    // Force this M-mode-addressed CSR to require S-priv via the UDP.
+    // The access controller should emit an override arm for this
+    // register's 12-bit address.
+    reg {
+        riscv_priv = "s";
+        field { sw = rw; hw = r; reset = 0x0; } v[31:0];
+    } debug_peek @ 0xC04;
+};
