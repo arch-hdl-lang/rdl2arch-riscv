@@ -9,8 +9,10 @@ later phase).
 
 - ✅ Phase 1 — CSR-file module (storage + decode + WPRI / WARL legalization + trap-signal pulses).
 - ✅ Phase 2 — Access-controller module (privilege check + read-only check + per-register priv overrides).
-- ⏳ Phase 3 — Trap coordinator (save-on-trap / restore-on-ret lifecycle).
-- ⏳ Phase 4 — Functional verification stack (arch sim + Verilator).
+- ✅ Phase 3 — Trap coordinator (save-on-trap routing; restore-on-ret via external wiring).
+- ⏳ Phase 4 — Functional verification stack.
+  - ✅ Phase 4a — Pybind arch-sim tests (CSR file + access controller + trap coordinator).
+  - ⏳ Phase 4b — cocotb + Verilator (SV-level parity).
 
 ## Install
 
