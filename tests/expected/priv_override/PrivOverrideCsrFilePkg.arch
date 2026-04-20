@@ -1,0 +1,25 @@
+package PrivOverrideCsrFilePkg
+
+  enum PrivOverrideCsrFileAddr
+    Mstatus,
+    DebugPeek
+  end enum PrivOverrideCsrFileAddr
+
+  struct MstatusReg
+    v: UInt<32>;
+  end struct MstatusReg
+
+  struct DebugPeekReg
+    v: UInt<32>;
+  end struct DebugPeekReg
+
+  struct PrivOverrideCsrFileHwifIn
+    _reserved: UInt<1>;
+  end struct PrivOverrideCsrFileHwifIn
+
+  struct PrivOverrideCsrFileHwifOut
+    mstatus_v: UInt<32>;
+    debug_peek_v: UInt<32>;
+  end struct PrivOverrideCsrFileHwifOut
+
+end package PrivOverrideCsrFilePkg

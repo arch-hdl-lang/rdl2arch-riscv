@@ -1,0 +1,139 @@
+use MTrapCsrsCsrFilePkg;
+
+module MTrapCsrsCsrFile
+  port clk:          in Clock<SysDomain>;
+  port rst:          in Reset<Sync>;
+  port csr_addr:     in UInt<12>;
+  port csr_write_en: in Bool;
+  port csr_read_en:  in Bool;
+  port csr_op:       in UInt<2>;
+  port csr_wdata:    in UInt<32>;
+  port csr_rdata:    out UInt<32>;
+  port mtvec_write: out Bool;
+  port hwif_in:  in MTrapCsrsCsrFileHwifIn;
+  port hwif_out: out MTrapCsrsCsrFileHwifOut;
+
+  default seq on clk rising;
+
+  reg mstatus_r: MstatusReg reset rst => MstatusReg { wpri_lo: 0, reserved_2_1: 0, mie: 0, reserved_6_4: 0, mpie: 0, reserved_10_8: 0, mpp: 0, wpri_hi: 0 };
+  reg mtvec_r: MtvecReg reset rst => MtvecReg { mode: 0, base: 0 };
+  reg mepc_r: MepcReg reset rst => MepcReg { epc: 0 };
+  reg mcause_r: McauseReg reset rst => McauseReg { cause: 0 };
+  reg mtval_r: MtvalReg reset rst => MtvalReg { tval: 0 };
+  reg mscratch_r: MscratchReg reset rst => MscratchReg { value: 0 };
+
+  reg mtvec_write_r: Bool reset rst => false;
+
+  let csr_rdata_mux: UInt<32> = match csr_addr
+    12'h300 => {19'h0, mstatus_r.mpp, 3'h0, mstatus_r.mpie, 3'h0, mstatus_r.mie, 2'h0, false},
+    12'h305 => {mtvec_r.base, mtvec_r.mode},
+    12'h341 => mepc_r.epc,
+    12'h342 => mcause_r.cause,
+    12'h343 => mtval_r.tval,
+    12'h340 => mscratch_r.value,
+    _ => 0
+  end match;
+
+  seq
+    mtvec_write_r <= false;
+    mstatus_r.reserved_2_1 <= hwif_in.mstatus_reserved_2_1;
+    mstatus_r.mie <= hwif_in.mstatus_mie;
+    mstatus_r.reserved_6_4 <= hwif_in.mstatus_reserved_6_4;
+    mstatus_r.mpie <= hwif_in.mstatus_mpie;
+    mstatus_r.reserved_10_8 <= hwif_in.mstatus_reserved_10_8;
+    mstatus_r.mpp <= hwif_in.mstatus_mpp;
+    mstatus_r.wpri_hi <= hwif_in.mstatus_wpri_hi;
+    mepc_r.epc <= hwif_in.mepc_epc;
+    mcause_r.cause <= hwif_in.mcause_cause;
+    mtval_r.tval <= hwif_in.mtval_tval;
+    if csr_write_en
+      if csr_addr == 12'h300
+        mstatus_r.mie <= match csr_op
+            2'b01 => csr_wdata[3],
+            2'b10 => mstatus_r.mie | csr_wdata[3],
+            2'b11 => mstatus_r.mie & (~csr_wdata[3]),
+            _    => mstatus_r.mie
+          end match;
+        mstatus_r.mpie <= match csr_op
+            2'b01 => csr_wdata[7],
+            2'b10 => mstatus_r.mpie | csr_wdata[7],
+            2'b11 => mstatus_r.mpie & (~csr_wdata[7]),
+            _    => mstatus_r.mpie
+          end match;
+        mstatus_r.mpp <= (match csr_op
+            2'b01 => csr_wdata[12:11],
+            2'b10 => mstatus_r.mpp | csr_wdata[12:11],
+            2'b11 => mstatus_r.mpp & (~csr_wdata[12:11]),
+            _    => mstatus_r.mpp
+          end match) & 2'h3;
+      end if
+      if csr_addr == 12'h305
+        mtvec_r.mode <= match (match csr_op
+            2'b01 => csr_wdata[1:0],
+            2'b10 => mtvec_r.mode | csr_wdata[1:0],
+            2'b11 => mtvec_r.mode & (~csr_wdata[1:0]),
+            _    => mtvec_r.mode
+          end match)
+            2'h0 => 2'h0,
+            2'h1 => 2'h1,
+            _    => 2'h0
+          end match;
+        mtvec_write_r <= true;
+        mtvec_r.base <= match csr_op
+            2'b01 => csr_wdata[31:2],
+            2'b10 => mtvec_r.base | csr_wdata[31:2],
+            2'b11 => mtvec_r.base & (~csr_wdata[31:2]),
+            _    => mtvec_r.base
+          end match;
+      end if
+      if csr_addr == 12'h341
+        mepc_r.epc <= (match csr_op
+            2'b01 => csr_wdata[31:0],
+            2'b10 => mepc_r.epc | csr_wdata[31:0],
+            2'b11 => mepc_r.epc & (~csr_wdata[31:0]),
+            _    => mepc_r.epc
+          end match) & 32'hfffffffe;
+      end if
+      if csr_addr == 12'h342
+        mcause_r.cause <= match csr_op
+            2'b01 => csr_wdata[31:0],
+            2'b10 => mcause_r.cause | csr_wdata[31:0],
+            2'b11 => mcause_r.cause & (~csr_wdata[31:0]),
+            _    => mcause_r.cause
+          end match;
+      end if
+      if csr_addr == 12'h343
+        mtval_r.tval <= match csr_op
+            2'b01 => csr_wdata[31:0],
+            2'b10 => mtval_r.tval | csr_wdata[31:0],
+            2'b11 => mtval_r.tval & (~csr_wdata[31:0]),
+            _    => mtval_r.tval
+          end match;
+      end if
+      if csr_addr == 12'h340
+        mscratch_r.value <= match csr_op
+            2'b01 => csr_wdata[31:0],
+            2'b10 => mscratch_r.value | csr_wdata[31:0],
+            2'b11 => mscratch_r.value & (~csr_wdata[31:0]),
+            _    => mscratch_r.value
+          end match;
+      end if
+    end if
+  end seq
+
+  comb
+    csr_rdata = csr_read_en ? csr_rdata_mux : 0;
+    mtvec_write = mtvec_write_r;
+    hwif_out.mstatus_wpri_lo = mstatus_r.wpri_lo;
+    hwif_out.mstatus_mie = mstatus_r.mie;
+    hwif_out.mstatus_mpie = mstatus_r.mpie;
+    hwif_out.mstatus_mpp = mstatus_r.mpp;
+    hwif_out.mtvec_mode = mtvec_r.mode;
+    hwif_out.mtvec_base = mtvec_r.base;
+    hwif_out.mepc_epc = mepc_r.epc;
+    hwif_out.mcause_cause = mcause_r.cause;
+    hwif_out.mtval_tval = mtval_r.tval;
+    hwif_out.mscratch_value = mscratch_r.value;
+  end comb
+
+end module MTrapCsrsCsrFile

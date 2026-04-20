@@ -1,0 +1,69 @@
+use PrivOverrideCsrFilePkg;
+
+module PrivOverrideRiscvTop
+  port clk: in Clock<SysDomain>;
+  port rst: in Reset<Sync>;
+
+  port csr_addr:   in UInt<12>;
+  port csr_opcode: in UInt<3>;
+  port csr_wdata:  in UInt<32>;
+  port cur_priv:   in UInt<2>;
+  port valid:      in Bool;
+  port trap_enter: in Bool;
+
+  port granted:    out Bool;
+  port illegal:    out Bool;
+  port cause:      out UInt<5>;
+  port csr_rdata:  out UInt<32>;
+
+  wire granted_w: Bool;
+  wire illegal_w: Bool;
+  wire cause_w:   UInt<5>;
+  wire rdata_w:   UInt<32>;
+  wire csr_op_w:  UInt<2>;
+  wire write_en_w: Bool;
+  wire hwif_live_w:  PrivOverrideCsrFileHwifIn;
+  wire hwif_drive_w: PrivOverrideCsrFileHwifIn;
+  wire hwif_out_w:   PrivOverrideCsrFileHwifOut;
+
+  comb
+
+    csr_op_w = csr_opcode[1:0];
+    write_en_w = granted_w and (csr_op_w != 2'b00);
+
+    granted = granted_w;
+    illegal = illegal_w;
+    cause   = cause_w;
+    csr_rdata = rdata_w;
+  end comb
+
+  inst access: PrivOverrideCsrAccess
+    csr_addr   <- csr_addr;
+    csr_opcode <- csr_opcode;
+    cur_priv   <- cur_priv;
+    valid      <- valid;
+    granted    -> granted_w;
+    illegal    -> illegal_w;
+    cause      -> cause_w;
+  end inst access
+
+  inst trap: PrivOverrideCsrTrapCoord
+    clk <- clk; rst <- rst;
+    trap_enter <- trap_enter;
+    hwif_in_live  <- hwif_live_w;
+    hwif_in_drive -> hwif_drive_w;
+  end inst trap
+
+  inst csr: PrivOverrideCsrFile
+    clk <- clk; rst <- rst;
+    csr_addr     <- csr_addr;
+    csr_op       <- csr_op_w;
+    csr_write_en <- write_en_w;
+    csr_read_en  <- granted_w;
+    csr_wdata    <- csr_wdata;
+    csr_rdata    -> rdata_w;
+    hwif_in  <- hwif_drive_w;
+    hwif_out -> hwif_out_w;
+  end inst csr
+
+end module PrivOverrideRiscvTop
