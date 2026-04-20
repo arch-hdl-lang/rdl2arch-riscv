@@ -54,58 +54,72 @@ def _reset_struct_literal(reg: CsrRegModel) -> str:
     return f"{reg.struct_name} {{ {parts} }}"
 
 
-def _field_new_value(field: CsrFieldModel, old_ref: str) -> str:
-    """The effective new value for a field after opcode + WPRI/WARL coercion.
+def _opcode_match_lines(field: CsrFieldModel, old_ref: str) -> list[str]:
+    """Per-opcode new value as a multi-line match block (no trailing semicolon).
 
-    `old_ref` is the ARCH expression for the field's current value (e.g.
-    `mstatus_r.mie`). Returns an ARCH expression of the same width.
+    Caller splices the lines in with appropriate indentation.
     """
     slice_expr = _wdata_slice(field)
+    return [
+        "match csr_op",
+        f"  2'b01 => {slice_expr},",
+        f"  2'b10 => {old_ref} | {slice_expr},",
+        f"  2'b11 => {old_ref} & (~{slice_expr}),",
+        f"  _    => {old_ref}",
+        "end match",
+    ]
 
-    # Opcode-dependent raw new value: we compute the operand-applied value,
-    # then apply WPRI / WARL coercion.
-    op_expr = (
-        f"(match csr_op "
-        f"2'b01 => {slice_expr}, "
-        f"2'b10 => {old_ref} | {slice_expr}, "
-        f"2'b11 => {old_ref} & (~{slice_expr}), "
-        f"_ => {old_ref} "
-        f"end match)"
-    )
 
-    # WPRI: field is reserved, drop any software write.
-    if field.wpri:
-        return old_ref
+def _field_write_lines(field: CsrFieldModel, state_ref: str) -> list[str]:
+    """ARCH seq lines for a CPU write to this field, or [] if nothing to emit.
 
-    # WARL: legalize the operand-applied value.
-    if field.warl is not None:
-        kind, payload = field.warl
-        if kind == "mask":
-            mask_lit = f"{field.width}'h{int(payload) & ((1 << field.width) - 1):x}"
-            return f"({op_expr} & {mask_lit})"
-        if kind == "enum":
-            legal: list[int] = sorted(set(payload))
-            # Nested match: if op_expr == legal_i, return legal_i; else ...
-            # Simplification: the operand-applied value either equals one of
-            # the legal values (keep it), or falls back to the first listed
-            # value. Implementation: a match scrutinee on op_expr against each
-            # legal value; default branch returns legal[0].
-            arms = ",\n    ".join(
-                f"{field.width}'h{v:x} => {field.width}'h{v:x}"
-                for v in legal
-            )
-            default = f"{field.width}'h{legal[0]:x}"
-            return (
-                f"match {op_expr}\n"
-                f"    {arms},\n"
-                f"    _ => {default}\n"
-                f"  end match"
-            )
-        # Unknown warl kind: preserve old value conservatively.
-        return old_ref
+    Returned lines are indentation-agnostic — the caller prefixes them with
+    the right leading whitespace. The first line starts the assignment;
+    subsequent lines are continuations that need an extra indent.
+    """
+    if field.wpri or not field.sw_writable:
+        # WPRI fields silently discard writes — no statement needed at all.
+        # Non-sw-writable fields shouldn't reach here in the first place, but
+        # guard just in case.
+        return []
 
-    # Plain sw-writable field: opcode-applied value.
-    return op_expr
+    lhs = f"{state_ref}.{field.name}"
+    old_ref = lhs
+    op_lines = _opcode_match_lines(field, old_ref)
+
+    # Plain (no WARL): `lhs <= match csr_op ... end match;`
+    if field.warl is None:
+        out = [f"{lhs} <= {op_lines[0]}"]
+        out.extend(op_lines[1:-1])
+        out.append(f"{op_lines[-1]};")
+        return out
+
+    kind, payload = field.warl
+
+    # WARL bitmask: `lhs <= (match csr_op ... end match) & mask;`
+    if kind == "mask":
+        mask_lit = f"{field.width}'h{int(payload) & ((1 << field.width) - 1):x}"
+        out = [f"{lhs} <= ({op_lines[0]}"]
+        out.extend(op_lines[1:-1])
+        out.append(f"{op_lines[-1]}) & {mask_lit};")
+        return out
+
+    # WARL enum-list: outer match against the legal values; default = legal[0].
+    if kind == "enum":
+        legal: list[int] = sorted(set(payload))
+        default = f"{field.width}'h{legal[0]:x}"
+        out = [f"{lhs} <= match ({op_lines[0]}"]
+        out.extend(op_lines[1:-1])
+        out.append(f"{op_lines[-1]})")
+        for v in legal:
+            lit = f"{field.width}'h{v:x}"
+            out.append(f"  {lit} => {lit},")
+        out.append(f"  _    => {default}")
+        out.append("end match;")
+        return out
+
+    # Unknown warl kind: preserve conservatively by emitting nothing.
+    return []
 
 
 def _field_read_value(field: CsrFieldModel, state_ref: str) -> str:
@@ -184,33 +198,47 @@ def emit_csr_file(design: CsrDesignModel) -> str:
                     f"    {reg.state_name}.{f.name} <= hwif_in.{reg.name}_{f.name};"
                 )
 
-    # Per-register write block.
+    # Per-register write block. Collect lines per-reg, filtering out regs
+    # whose only fields are WPRI or non-sw-writable (nothing to emit).
+    #
+    # Each item is (reg, [line, ...]) where the lines already include the
+    # leading `<state>.<field> <= ...;` and any trap-signal pulse assigns,
+    # but NOT the surrounding `if csr_addr == ... end if`. The caller wraps
+    # those + applies address-block indentation.
     per_reg_writes: list[tuple[CsrRegModel, list[str]]] = []
     for reg in design.regs:
-        stmts: list[str] = []
-        reg_trap_sig = reg.trap_signal
+        block: list[str] = []
         for f in reg.fields:
-            if not f.sw_writable:
-                continue
-            new_val = _field_new_value(f, f"{reg.state_name}.{f.name}")
-            stmts.append(f"{reg.state_name}.{f.name} <= {new_val};")
-            if f.trap_signal:
-                stmts.append(f"{f.trap_signal}_r <= true;")
-        if reg_trap_sig:
-            stmts.append(f"{reg_trap_sig}_r <= true;")
-        if stmts:
-            per_reg_writes.append((reg, stmts))
+            fl = _field_write_lines(f, reg.state_name)
+            if fl:
+                block.extend(fl)
+                if f.trap_signal:
+                    block.append(f"{f.trap_signal}_r <= true;")
+        if reg.trap_signal:
+            block.append(f"{reg.trap_signal}_r <= true;")
+        if block:
+            per_reg_writes.append((reg, block))
 
     if per_reg_writes:
         lines.append("    if csr_write_en")
-        for reg, stmts in per_reg_writes:
+        for reg, block in per_reg_writes:
             lines.append(f"      if csr_addr == 12'h{reg.address:x}")
-            for stmt in stmts:
-                # Multi-line `new_value` (nested match) — indent continuation.
-                for i, ln in enumerate(stmt.splitlines()):
-                    pad = "        " if i == 0 else "          "
-                    lines.append(pad + ln)
-            lines.append("      end if")
+            # First line of each statement starts at 8-space indent; its
+            # continuation lines go 2 more in (10 spaces). Each top-level
+            # statement in `block` either begins with `<lhs> <=` (start of a
+            # new assign) or `<signal>_r <= true;` (atomic one-liner). We
+            # detect statement starts by whether the line contains ` <= `
+            # at the top (the `match csr_op` et al continuation lines don't).
+            stmt_indent = " " * 8
+            cont_indent = " " * 10
+            for ln in block:
+                if " <= " in ln and not ln.startswith(" "):
+                    lines.append(stmt_indent + ln)
+                elif ln.startswith("end match"):
+                    lines.append(cont_indent + ln)
+                else:
+                    lines.append(cont_indent + ln)
+            lines.append(f"      end if")
         lines.append("    end if")
 
     lines.append("  end seq")
