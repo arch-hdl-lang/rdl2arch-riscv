@@ -1,0 +1,70 @@
+package MTrapCsrsCsrFilePkg
+
+  enum MTrapCsrsCsrFileAddr
+    Mstatus,
+    Mtvec,
+    Mepc,
+    Mcause,
+    Mtval,
+    Mscratch
+  end enum MTrapCsrsCsrFileAddr
+
+  struct MstatusReg
+    wpri_lo: UInt<1>;
+    reserved_2_1: UInt<2>;
+    mie: UInt<1>;
+    reserved_6_4: UInt<3>;
+    mpie: UInt<1>;
+    reserved_10_8: UInt<3>;
+    mpp: UInt<2>;
+    wpri_hi: UInt<19>;
+  end struct MstatusReg
+
+  struct MtvecReg
+    mode: UInt<2>;
+    base: UInt<30>;
+  end struct MtvecReg
+
+  struct MepcReg
+    epc: UInt<32>;
+  end struct MepcReg
+
+  struct McauseReg
+    cause: UInt<32>;
+  end struct McauseReg
+
+  struct MtvalReg
+    tval: UInt<32>;
+  end struct MtvalReg
+
+  struct MscratchReg
+    value: UInt<32>;
+  end struct MscratchReg
+
+  struct MTrapCsrsCsrFileHwifIn
+    mstatus_reserved_2_1: UInt<2>;
+    mstatus_mie: UInt<1>;
+    mstatus_reserved_6_4: UInt<3>;
+    mstatus_mpie: UInt<1>;
+    mstatus_reserved_10_8: UInt<3>;
+    mstatus_mpp: UInt<2>;
+    mstatus_wpri_hi: UInt<19>;
+    mepc_epc: UInt<32>;
+    mcause_cause: UInt<32>;
+    mtval_tval: UInt<32>;
+  end struct MTrapCsrsCsrFileHwifIn
+
+  struct MTrapCsrsCsrFileHwifOut
+    mstatus_wpri_lo: UInt<1>;
+    mstatus_mie: UInt<1>;
+    mstatus_mpie: UInt<1>;
+    mstatus_mpp: UInt<2>;
+    mtvec_mode: UInt<2>;
+    mtvec_base: UInt<30>;
+    mepc_epc: UInt<32>;
+    mcause_cause: UInt<32>;
+    mtval_tval: UInt<32>;
+    mscratch_value: UInt<32>;
+  end struct MTrapCsrsCsrFileHwifOut
+
+end package MTrapCsrsCsrFilePkg

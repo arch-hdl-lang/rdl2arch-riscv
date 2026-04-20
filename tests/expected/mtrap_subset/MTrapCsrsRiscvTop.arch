@@ -1,0 +1,93 @@
+use MTrapCsrsCsrFilePkg;
+
+module MTrapCsrsRiscvTop
+  port clk: in Clock<SysDomain>;
+  port rst: in Reset<Sync>;
+
+  port csr_addr:   in UInt<12>;
+  port csr_opcode: in UInt<3>;
+  port csr_wdata:  in UInt<32>;
+  port cur_priv:   in UInt<2>;
+  port valid:      in Bool;
+  port trap_enter: in Bool;
+  port save_mstatus_mpie: in UInt<1>;
+  port save_mstatus_mpp: in UInt<2>;
+  port save_mepc_epc: in UInt<32>;
+  port save_mcause_cause: in UInt<32>;
+  port save_mtval_tval: in UInt<32>;
+
+  port granted:    out Bool;
+  port illegal:    out Bool;
+  port cause:      out UInt<5>;
+  port csr_rdata:  out UInt<32>;
+  port mtvec_write: out Bool;
+
+  wire granted_w: Bool;
+  wire illegal_w: Bool;
+  wire cause_w:   UInt<5>;
+  wire rdata_w:   UInt<32>;
+  wire csr_op_w:  UInt<2>;
+  wire write_en_w: Bool;
+  wire hwif_live_w:  MTrapCsrsCsrFileHwifIn;
+  wire hwif_drive_w: MTrapCsrsCsrFileHwifIn;
+  wire hwif_out_w:   MTrapCsrsCsrFileHwifOut;
+  wire mtvec_write_w: Bool;
+
+  comb
+    hwif_live_w.mstatus_reserved_2_1 = 0;
+    hwif_live_w.mstatus_mie = 0;
+    hwif_live_w.mstatus_reserved_6_4 = 0;
+    hwif_live_w.mstatus_mpie = 0;
+    hwif_live_w.mstatus_reserved_10_8 = 0;
+    hwif_live_w.mstatus_mpp = 0;
+    hwif_live_w.mstatus_wpri_hi = 0;
+    hwif_live_w.mepc_epc = 0;
+    hwif_live_w.mcause_cause = 0;
+    hwif_live_w.mtval_tval = 0;
+
+    csr_op_w = csr_opcode[1:0];
+    write_en_w = granted_w and (csr_op_w != 2'b00);
+
+    granted = granted_w;
+    illegal = illegal_w;
+    cause   = cause_w;
+    csr_rdata = rdata_w;
+    mtvec_write = mtvec_write_w;
+  end comb
+
+  inst access: MTrapCsrsCsrAccess
+    csr_addr   <- csr_addr;
+    csr_opcode <- csr_opcode;
+    cur_priv   <- cur_priv;
+    valid      <- valid;
+    granted    -> granted_w;
+    illegal    -> illegal_w;
+    cause      -> cause_w;
+  end inst access
+
+  inst trap: MTrapCsrsCsrTrapCoord
+    clk <- clk; rst <- rst;
+    trap_enter <- trap_enter;
+    save_mstatus_mpie <- save_mstatus_mpie;
+    save_mstatus_mpp <- save_mstatus_mpp;
+    save_mepc_epc <- save_mepc_epc;
+    save_mcause_cause <- save_mcause_cause;
+    save_mtval_tval <- save_mtval_tval;
+    hwif_in_live  <- hwif_live_w;
+    hwif_in_drive -> hwif_drive_w;
+  end inst trap
+
+  inst csr: MTrapCsrsCsrFile
+    clk <- clk; rst <- rst;
+    csr_addr     <- csr_addr;
+    csr_op       <- csr_op_w;
+    csr_write_en <- write_en_w;
+    csr_read_en  <- granted_w;
+    csr_wdata    <- csr_wdata;
+    csr_rdata    -> rdata_w;
+    mtvec_write -> mtvec_write_w;
+    hwif_in  <- hwif_drive_w;
+    hwif_out -> hwif_out_w;
+  end inst csr
+
+end module MTrapCsrsRiscvTop

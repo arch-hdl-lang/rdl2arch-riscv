@@ -1,0 +1,24 @@
+module PrivOverrideCsrAccess
+  port csr_addr:   in  UInt<12>;
+  port csr_opcode: in  UInt<3>;
+  port cur_priv:   in  UInt<2>;
+  port valid:      in  Bool;
+  port granted:    out Bool;
+  port illegal:    out Bool;
+  port cause:      out UInt<5>;
+
+  let min_priv: UInt<2> = match csr_addr
+    12'h301 => 2'b01,
+    _       => csr_addr[9:8]
+  end match;
+  let is_ro:     Bool = (csr_addr[11:10] == 2'b11);
+  let is_write:  Bool = csr_opcode[1:0] != 2'b00;
+  let priv_ok:   Bool = cur_priv >= min_priv;
+  let access_ok: Bool = priv_ok and not (is_ro and is_write);
+
+  comb
+    granted = valid and access_ok;
+    illegal = valid and not access_ok;
+    cause   = 5'd2;
+  end comb
+end module PrivOverrideCsrAccess
