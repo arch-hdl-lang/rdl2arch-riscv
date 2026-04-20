@@ -23,3 +23,12 @@ package PrivOverrideCsrFilePkg
   end struct PrivOverrideCsrFileHwifOut
 
 end package PrivOverrideCsrFilePkg
+
+bus PrivOverrideCsrFileBus
+  addr:     out UInt<12>;
+  op:       out UInt<2>;
+  write_en: out Bool;
+  read_en:  out Bool;
+  wdata:    out UInt<32>;
+  rdata:    in  UInt<32>;
+end bus PrivOverrideCsrFileBus

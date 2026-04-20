@@ -1,13 +1,15 @@
 """Emit the top CSR-file ARCH module.
 
-Port convention (custom, not a bus — CSR accesses come from the pipeline):
+Pipeline-facing interface is a `target <Name>CsrFileBus` port. The bus
+bundles the CSR access signals; directions below are from the
+pipeline's (initiator's) perspective:
 
-  port csr_addr:     in  UInt<12>
-  port csr_write_en: in  Bool      — granted by the access controller
-  port csr_read_en:  in  Bool      — granted by the access controller
-  port csr_op:       in  UInt<2>   — 00=read-only, 01=write, 10=set, 11=clear
-  port csr_wdata:    in  UInt<XLEN>
-  port csr_rdata:    out UInt<XLEN>
+  csr.addr:     out UInt<12>
+  csr.write_en: out Bool      — granted by the access controller
+  csr.read_en:  out Bool      — granted by the access controller
+  csr.op:       out UInt<2>   — 00=read-only, 01=write, 10=set, 11=clear
+  csr.wdata:    out UInt<XLEN>
+  csr.rdata:    in  UInt<XLEN>
 
 Plus one `<signal>_pulse: out Bool` port per distinct `riscv_trap_signal`
 value and hwif_in/hwif_out structs for hw-driven fields.
@@ -45,8 +47,8 @@ def _ones_lit(w: int) -> str:
 def _wdata_slice(field: CsrFieldModel) -> str:
     """Extract `wdata[msb:lsb]` to get this field's new-value slice."""
     if field.width == 1:
-        return f"csr_wdata[{field.lsb}]"
-    return f"csr_wdata[{field.msb}:{field.lsb}]"
+        return f"csr.wdata[{field.lsb}]"
+    return f"csr.wdata[{field.msb}:{field.lsb}]"
 
 
 def _reset_struct_literal(reg: CsrRegModel) -> str:
@@ -61,7 +63,7 @@ def _opcode_match_lines(field: CsrFieldModel, old_ref: str) -> list[str]:
     """
     slice_expr = _wdata_slice(field)
     return [
-        "match csr_op",
+        "match csr.op",
         f"  2'b01 => {slice_expr},",
         f"  2'b10 => {old_ref} | {slice_expr},",
         f"  2'b11 => {old_ref} & (~{slice_expr}),",
@@ -137,14 +139,9 @@ def emit_csr_file(design: CsrDesignModel) -> str:
     lines.append(f"use {design.package_name};")
     lines.append("")
     lines.append(f"module {design.module_name}")
-    lines.append("  port clk:          in Clock<SysDomain>;")
-    lines.append("  port rst:          in Reset<Sync>;")
-    lines.append("  port csr_addr:     in UInt<12>;")
-    lines.append("  port csr_write_en: in Bool;")
-    lines.append("  port csr_read_en:  in Bool;")
-    lines.append("  port csr_op:       in UInt<2>;")
-    lines.append(f"  port csr_wdata:    in UInt<{xlen}>;")
-    lines.append(f"  port csr_rdata:    out UInt<{xlen}>;")
+    lines.append("  port clk: in Clock<SysDomain>;")
+    lines.append("  port rst: in Reset<Sync>;")
+    lines.append(f"  port csr: target {design.csr_file_bus};")
 
     # One named-pulse output per distinct riscv_trap_signal value.
     trap_signals = sorted({
@@ -172,9 +169,9 @@ def emit_csr_file(design: CsrDesignModel) -> str:
         lines.append(f"  reg {sig}_r: Bool reset rst => false;")
     lines.append("")
 
-    # Combinational readback mux: match on csr_addr against each CSR's 12-bit
+    # Combinational readback mux: match on csr.addr against each CSR's 12-bit
     # RISC-V address; value is the packed read-view of the register.
-    lines.append(f"  let csr_rdata_mux: UInt<{xlen}> = match csr_addr")
+    lines.append(f"  let csr_rdata_mux: UInt<{xlen}> = match csr.addr")
     for reg in design.regs:
         expr = _reg_read_expr(reg, xlen)
         lines.append(f"    12'h{reg.address:x} => {expr},")
@@ -220,9 +217,9 @@ def emit_csr_file(design: CsrDesignModel) -> str:
             per_reg_writes.append((reg, block))
 
     if per_reg_writes:
-        lines.append("    if csr_write_en")
+        lines.append("    if csr.write_en")
         for reg, block in per_reg_writes:
-            lines.append(f"      if csr_addr == 12'h{reg.address:x}")
+            lines.append(f"      if csr.addr == 12'h{reg.address:x}")
             # First line of each statement starts at 8-space indent; its
             # continuation lines go 2 more in (10 spaces). Each top-level
             # statement in `block` either begins with `<lhs> <=` (start of a
@@ -244,9 +241,9 @@ def emit_csr_file(design: CsrDesignModel) -> str:
     lines.append("  end seq")
     lines.append("")
 
-    # Comb block: drive csr_rdata, trap-signal pulses, hwif_out.
+    # Comb block: drive csr.rdata, trap-signal pulses, hwif_out.
     lines.append("  comb")
-    lines.append("    csr_rdata = csr_read_en ? csr_rdata_mux : 0;")
+    lines.append("    csr.rdata = csr.read_en ? csr_rdata_mux : 0;")
     for sig in trap_signals:
         lines.append(f"    {sig} = {sig}_r;")
     for reg in design.regs:
