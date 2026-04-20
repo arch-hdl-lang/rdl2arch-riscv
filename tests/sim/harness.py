@@ -20,7 +20,10 @@ from pathlib import Path
 from systemrdl import RDLCompiler
 
 from rdl2arch_riscv import RiscvCsrExporter
+from rdl2arch_riscv.scan_csrs import scan
 from rdl2arch_riscv.udps import ALL_UDPS
+
+from sim.integrated_top import emit_integrated_top, integrated_top_name
 
 
 MODULE_SUFFIXES = {
@@ -38,33 +41,11 @@ def _compile_rdl(rdl_path: Path):
     return rdlc.elaborate()
 
 
-def build_sim(rdl_path: Path, target: str, out_dir: Path, arch_bin: str) -> str:
-    """Emit ARCH, build `arch sim --pybind` for one module, return the .so path.
-
-    `target` must be one of `csr_file`, `access`, `trap_coord`.
-    """
-    if target not in MODULE_SUFFIXES:
-        raise ValueError(f"target must be one of {list(MODULE_SUFFIXES)}; got {target!r}")
-    suffix = MODULE_SUFFIXES[target]
-
-    root = _compile_rdl(rdl_path)
-    RiscvCsrExporter().export(root.top, str(out_dir))
-
-    # The package is named <Base>CsrFilePkg; the target module is <Base><suffix>.
-    pkg_files = sorted(out_dir.glob("*Pkg.arch"))
-    mod_files = sorted(p for p in out_dir.glob(f"*{suffix}.arch")
-                       if not p.name.endswith("Pkg.arch"))
-    if len(pkg_files) != 1 or len(mod_files) != 1:
-        emitted = sorted(p.name for p in out_dir.glob("*.arch"))
-        raise RuntimeError(
-            f"expected exactly one package + one {suffix} module, "
-            f"found pkg={pkg_files}, mod={mod_files}, all={emitted}"
-        )
-
-    build_dir = out_dir / f"sim_{target}"
+def _run_pybind(arch_bin: str, build_dir: Path, inputs: list[Path],
+                target: str) -> None:
     result = subprocess.run(
         [arch_bin, "sim", "--pybind", "-o", str(build_dir),
-         str(pkg_files[0]), str(mod_files[0])],
+         *[str(p) for p in inputs]],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -73,6 +54,53 @@ def build_sim(rdl_path: Path, target: str, out_dir: Path, arch_bin: str) -> str:
             f"STDERR:\n{result.stderr}\nSTDOUT:\n{result.stdout}"
         )
 
+
+def build_sim(rdl_path: Path, target: str, out_dir: Path, arch_bin: str) -> str:
+    """Emit ARCH, build `arch sim --pybind` for one target, return the .so path.
+
+    `target` must be one of `csr_file`, `access`, `trap_coord`, or
+    `integrated`. The `integrated` target wires all three modules together
+    via a generated test-only top — see `sim/integrated_top.py`.
+    """
+    if target not in MODULE_SUFFIXES and target != "integrated":
+        raise ValueError(
+            f"target must be one of {list(MODULE_SUFFIXES) + ['integrated']}; "
+            f"got {target!r}"
+        )
+
+    root = _compile_rdl(rdl_path)
+    RiscvCsrExporter().export(root.top, str(out_dir))
+
+    pkg_files = sorted(out_dir.glob("*Pkg.arch"))
+    if len(pkg_files) != 1:
+        raise RuntimeError(f"expected one package .arch, got {pkg_files}")
+
+    if target == "integrated":
+        design = scan(root.top, xlen=32)
+        top_src = emit_integrated_top(design)
+        top_name = integrated_top_name(design)
+        top_file = out_dir / f"{top_name}.arch"
+        top_file.write_text(top_src)
+        build_dir = out_dir / "sim_integrated"
+        _run_pybind(arch_bin, build_dir, sorted(out_dir.glob("*.arch")), target)
+        wanted = f"V{top_name}_pybind"
+        matching = [p for p in build_dir.glob("V*_pybind.*.so")
+                    if p.name.startswith(wanted)]
+        if not matching:
+            raise RuntimeError(
+                f"integrated-top .so {wanted} not found in {build_dir}"
+            )
+        return str(matching[0])
+
+    suffix = MODULE_SUFFIXES[target]
+    mod_files = sorted(p for p in out_dir.glob(f"*{suffix}.arch")
+                       if not p.name.endswith("Pkg.arch"))
+    if len(mod_files) != 1:
+        raise RuntimeError(
+            f"expected exactly one {suffix} module, got {mod_files}"
+        )
+    build_dir = out_dir / f"sim_{target}"
+    _run_pybind(arch_bin, build_dir, [pkg_files[0], mod_files[0]], target)
     so_files = list(build_dir.glob("V*_pybind.*.so"))
     if not so_files:
         raise RuntimeError(f"No pybind .so in {build_dir}")
