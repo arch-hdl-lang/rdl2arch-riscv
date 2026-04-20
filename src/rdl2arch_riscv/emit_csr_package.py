@@ -51,30 +51,24 @@ def emit_package(design: CsrDesignModel) -> str:
     lines.append(f"  end struct {design.hwif_out_struct}")
     lines.append("")
 
-    lines.append(f"end package {design.package_name}")
-    lines.append("")
-
     # Bus definition — bundles the CSR-file pipeline interface. Directions
     # are written from the initiator's (pipeline's) perspective: `out`
     # signals flow pipeline → CSR file, `in` signals flow CSR file →
-    # pipeline. ARCH's grammar requires `bus` at file scope (not nested
-    # inside `package`), so this lives alongside the package block rather
-    # than inside it.
-    #
-    # The access controller deliberately keeps flat ports: it produces
-    # `granted` as a flat output so the integrated top (or any wrapper)
-    # can consume it with a scalar wire — ARCH doesn't allow `wire` decls
-    # of bus type, so bus-port-to-bus-port bundles can't be spliced
-    # together with intermediate logic inside a parent module.
+    # pipeline. Lives inside the package (arch-com >= 0.44 supports nested
+    # `bus`) so the interface type groups with the data types that define
+    # the same pipeline boundary.
     xlen = design.xlen
-    lines.append(f"bus {design.csr_file_bus}")
-    lines.append("  addr:     out UInt<12>;")
-    lines.append("  op:       out UInt<2>;")
-    lines.append("  write_en: out Bool;")
-    lines.append("  read_en:  out Bool;")
-    lines.append(f"  wdata:    out UInt<{xlen}>;")
-    lines.append(f"  rdata:    in  UInt<{xlen}>;")
-    lines.append(f"end bus {design.csr_file_bus}")
+    lines.append(f"  bus {design.csr_file_bus}")
+    lines.append("    addr:     out UInt<12>;")
+    lines.append("    op:       out UInt<2>;")
+    lines.append("    write_en: out Bool;")
+    lines.append("    read_en:  out Bool;")
+    lines.append(f"    wdata:    out UInt<{xlen}>;")
+    lines.append(f"    rdata:    in  UInt<{xlen}>;")
+    lines.append(f"  end bus {design.csr_file_bus}")
+    lines.append("")
+
+    lines.append(f"end package {design.package_name}")
     lines.append("")
 
     return "\n".join(lines)
