@@ -55,6 +55,41 @@ def test_scan_captures_udps(tmp_path) -> None:
     assert mie.trap_signal == "my_pulse"
 
 
+def test_access_controller_emits_priv_override(tmp_path) -> None:
+    from rdl2arch_riscv.emit_access_controller import emit_access_controller
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } no_override @ 0xC00;    // M-priv via addr bits
+            reg {
+                riscv_priv = "s";
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } override_s @ 0xC04;      // CSR 0x301, explicit S-priv override
+        };
+    """)
+    d = scan(top)
+    src = emit_access_controller(d, "TCsrAccess")
+    assert "12'h301 => 2'b01," in src, f"missing S-priv override in:\n{src}"
+    assert "12'h300" not in src, f"non-overridden CSR leaked into match:\n{src}"
+    assert "_       => csr_addr[9:8]" in src
+
+
+def test_access_controller_no_overrides(tmp_path) -> None:
+    from rdl2arch_riscv.emit_access_controller import emit_access_controller
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } r0 @ 0xC00;
+        };
+    """)
+    d = scan(top)
+    src = emit_access_controller(d, "TCsrAccess")
+    assert "let min_priv: UInt<2> = csr_addr[9:8];" in src
+    assert "match csr_addr" not in src
+
+
 def test_validate_rejects_wpri_and_warl_together(tmp_path) -> None:
     top = _compile_rdl(tmp_path, """
         addrmap t {
