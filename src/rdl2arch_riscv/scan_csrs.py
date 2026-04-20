@@ -92,20 +92,25 @@ def _walk_regs(node):
 
 
 def _scan_reg(reg: RegNode, top: AddrmapNode) -> CsrRegModel:
-    # RISC-V CSR addresses are 12-bit, register-granular — but RDL is
-    # byte-addressed. Convention here: place each CSR at `csr_addr << 2` in
-    # RDL so byte ranges don't overlap between two adjacent 32-bit CSRs
-    # with addresses 0x341 and 0x342. The generator divides by 4 to recover
-    # the actual 12-bit RISC-V CSR address.
-    byte_addr = (reg.absolute_address if not reg.is_array
-                 else reg.parent.absolute_address + reg.raw_address_offset)
+    # Prefer the explicit `riscv_csr_addr` UDP when present — that's the
+    # RISC-V spec address (e.g. 0x300 for mstatus) with no shift games.
+    # Fall back to the legacy convention of `csr_addr << 2` in RDL byte
+    # space (dividing by 4 here), which sidesteps the RDL byte-range
+    # overlap check for adjacent 12-bit CSR addresses like 0x342 + 0x343.
+    csr_addr_override = reg.get_property("riscv_csr_addr")
+    if csr_addr_override is not None:
+        csr_addr = int(csr_addr_override)
+    else:
+        byte_addr = (reg.absolute_address if not reg.is_array
+                     else reg.parent.absolute_address + reg.raw_address_offset)
+        csr_addr = byte_addr >> 2
     m = CsrRegModel(
         node=reg,
         name=deref.flat_path(reg, top),
         state_name=deref.reg_state_name(reg, top),
         struct_name=deref.reg_struct_name(reg, top),
         enum_variant=deref.csr_enum_variant(reg, top),
-        address=byte_addr >> 2,
+        address=csr_addr,
         regwidth=reg.get_property("regwidth"),
         priv=reg.get_property("riscv_priv"),
         trap_signal=reg.get_property("riscv_trap_signal"),

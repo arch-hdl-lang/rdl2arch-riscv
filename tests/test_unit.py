@@ -19,6 +19,52 @@ def _compile_rdl(tmp_path, source: str):
     return rdlc.elaborate().top
 
 
+def test_riscv_csr_addr_udp_overrides_rdl_byte_addr(tmp_path) -> None:
+    """`riscv_csr_addr` wins over RDL `@` — scanner reads the UDP."""
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0x300;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mstatus @ 0x0;       // RDL byte address ignored
+            reg {
+                riscv_csr_addr = 0x305;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mtvec @ 0x4;
+        };
+    """)
+    d = scan(top)
+    assert [r.address for r in d.regs] == [0x300, 0x305]
+
+
+def test_legacy_byte_address_fallback(tmp_path) -> None:
+    """Without `riscv_csr_addr`, scanner falls back to `byte_addr >> 2`."""
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } r0 @ 0xC00;           // CSR 0x300 under old convention
+        };
+    """)
+    d = scan(top)
+    assert d.regs[0].address == 0x300
+
+
+def test_default_priv_at_addrmap(tmp_path) -> None:
+    """`default riscv_priv = "m";` at addrmap propagates to descendant regs."""
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0x300;
+                field { sw = rw; hw = r; reset = 0; } v[31:0];
+            } mstatus @ 0x0;
+        };
+    """)
+    d = scan(top)
+    assert d.regs[0].priv == "m"
+
+
 def test_parse_warl_mask() -> None:
     assert parse_warl("0x1F") == ("mask", 0x1F)
     assert parse_warl("0b101") == ("mask", 0b101)
