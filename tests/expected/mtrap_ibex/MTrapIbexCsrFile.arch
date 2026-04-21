@@ -15,6 +15,7 @@ module MTrapIbexCsrFile
   reg mcause_r: McauseReg reset rst => McauseReg { cause: 0 };
   reg mtval_r: MtvalReg reset rst => MtvalReg { tval: 0 };
   reg mscratch_r: MscratchReg reset rst => MscratchReg { value: 0 };
+  reg mstatus_r: MstatusReg reset rst => MstatusReg { wpri_lo: 0, reserved_2_1: 0, mie: 0, reserved_6_4: 0, mpie: 0, reserved_10_8: 0, mpp: 0, wpri_hi: 0 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
@@ -23,6 +24,7 @@ module MTrapIbexCsrFile
     12'h342 => mcause_r.cause,
     12'h343 => mtval_r.tval,
     12'h340 => mscratch_r.value,
+    12'h300 => {19'h0, mstatus_r.mpp, 3'h0, mstatus_r.mpie, 3'h0, mstatus_r.mie, 2'h0, false},
     _ => 0
   end match;
 
@@ -30,6 +32,13 @@ module MTrapIbexCsrFile
     mepc_r.epc <= hwif_in.mepc_epc;
     mcause_r.cause <= hwif_in.mcause_cause;
     mtval_r.tval <= hwif_in.mtval_tval;
+    mstatus_r.reserved_2_1 <= hwif_in.mstatus_reserved_2_1;
+    mstatus_r.mie <= hwif_in.mstatus_mie;
+    mstatus_r.reserved_6_4 <= hwif_in.mstatus_reserved_6_4;
+    mstatus_r.mpie <= hwif_in.mstatus_mpie;
+    mstatus_r.reserved_10_8 <= hwif_in.mstatus_reserved_10_8;
+    mstatus_r.mpp <= hwif_in.mstatus_mpp;
+    mstatus_r.wpri_hi <= hwif_in.mstatus_wpri_hi;
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
         if csr.cmd_addr == 12'h305
@@ -82,6 +91,26 @@ module MTrapIbexCsrFile
               _    => mscratch_r.value
             end match;
         end if
+        if csr.cmd_addr == 12'h300
+          mstatus_r.mie <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[3],
+              2'b10 => mstatus_r.mie | csr.cmd_wdata[3],
+              2'b11 => mstatus_r.mie & (~csr.cmd_wdata[3]),
+              _    => mstatus_r.mie
+            end match;
+          mstatus_r.mpie <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[7],
+              2'b10 => mstatus_r.mpie | csr.cmd_wdata[7],
+              2'b11 => mstatus_r.mpie & (~csr.cmd_wdata[7]),
+              _    => mstatus_r.mpie
+            end match;
+          mstatus_r.mpp <= (match csr.cmd_op
+              2'b01 => csr.cmd_wdata[12:11],
+              2'b10 => mstatus_r.mpp | csr.cmd_wdata[12:11],
+              2'b11 => mstatus_r.mpp & (~csr.cmd_wdata[12:11]),
+              _    => mstatus_r.mpp
+            end match) & 2'h3;
+        end if
       end if
     end if
   end seq
@@ -96,6 +125,10 @@ module MTrapIbexCsrFile
     hwif_out.mcause_cause = mcause_r.cause;
     hwif_out.mtval_tval = mtval_r.tval;
     hwif_out.mscratch_value = mscratch_r.value;
+    hwif_out.mstatus_wpri_lo = mstatus_r.wpri_lo;
+    hwif_out.mstatus_mie = mstatus_r.mie;
+    hwif_out.mstatus_mpie = mstatus_r.mpie;
+    hwif_out.mstatus_mpp = mstatus_r.mpp;
   end comb
 
 end module MTrapIbexCsrFile
