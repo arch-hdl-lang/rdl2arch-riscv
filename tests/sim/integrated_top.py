@@ -56,6 +56,14 @@ def _restore_fields(design: CsrDesignModel):
     ]
 
 
+def _mirror_fields(design: CsrDesignModel):
+    """Every (reg_name, field_name, width) where riscv_hw_mirror is set."""
+    return [
+        (reg.name, f.name, f.width)
+        for reg in design.regs for f in reg.fields if f.hw_mirror
+    ]
+
+
 def _hwif_in_members(design: CsrDesignModel):
     """Every (member_name, width) that appears in HwifIn (hw-writable fields)."""
     return [
@@ -93,6 +101,7 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     hwif_in_members = _hwif_in_members(design)
     save = _save_fields(design)
     restore = _restore_fields(design)
+    mirror = _mirror_fields(design)
     sigs = _trap_signals(design)
 
     lines: list[str] = []
@@ -123,6 +132,9 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
         lines.append(f"  port {port}: in UInt<{width}>;")
     for _reg, _fld, width in restore:
         port = f"restore_{_reg}_{_fld}"
+        lines.append(f"  port {port}: in UInt<{width}>;")
+    for _reg, _fld, width in mirror:
+        port = f"mirror_{_reg}_{_fld}"
         lines.append(f"  port {port}: in UInt<{width}>;")
     lines.append("")
     lines.append("  port granted:    out Bool;")
@@ -189,6 +201,9 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
         lines.append(f"    {port} <- {port};")
     for _reg, _fld, _w in restore:
         port = f"restore_{_reg}_{_fld}"
+        lines.append(f"    {port} <- {port};")
+    for _reg, _fld, _w in mirror:
+        port = f"mirror_{_reg}_{_fld}"
         lines.append(f"    {port} <- {port};")
     lines.append("    hwif_in_live  <- hwif_live_w;")
     lines.append("    hwif_in_drive -> hwif_drive_w;")

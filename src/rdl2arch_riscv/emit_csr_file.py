@@ -280,6 +280,12 @@ def emit_csr_file(design: CsrDesignModel) -> str:
                     f"    hwif_out.{reg.name}_{f.name} = "
                     f"{reg.state_name}.{f.name};"
                 )
+        # Spec-layout flat view — same expression the SW readback mux
+        # uses. Lets callers consume `<reg>_rdata_flat` without
+        # depending on packed-struct field names.
+        lines.append(
+            f"    hwif_out.{reg.name}_rdata_flat = {_reg_read_expr(reg, xlen)};"
+        )
     lines.append("  end comb")
     lines.append("")
     lines.append(f"end module {design.module_name}")

@@ -22,6 +22,10 @@ module MTrapIbexRiscvTop
   port restore_mstatus_mie: in UInt<1>;
   port restore_mstatus_mpie: in UInt<1>;
   port restore_mstatus_mpp: in UInt<2>;
+  port mirror_mip_msip: in UInt<1>;
+  port mirror_mip_mtip: in UInt<1>;
+  port mirror_mip_meip: in UInt<1>;
+  port mirror_mip_mfip_0: in UInt<1>;
 
   port granted:    out Bool;
   port illegal:    out Bool;
@@ -97,6 +101,10 @@ module MTrapIbexRiscvTop
     restore_mstatus_mie <- restore_mstatus_mie;
     restore_mstatus_mpie <- restore_mstatus_mpie;
     restore_mstatus_mpp <- restore_mstatus_mpp;
+    mirror_mip_msip <- mirror_mip_msip;
+    mirror_mip_mtip <- mirror_mip_mtip;
+    mirror_mip_meip <- mirror_mip_meip;
+    mirror_mip_mfip_0 <- mirror_mip_mfip_0;
     hwif_in_live  <- hwif_live_w;
     hwif_in_drive -> hwif_drive_w;
   end inst trap

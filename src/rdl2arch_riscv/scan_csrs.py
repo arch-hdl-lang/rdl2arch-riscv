@@ -33,6 +33,7 @@ class CsrFieldModel:
     trap_signal: Optional[str] = None
     save_on_trap: bool = False
     restore_on_ret: bool = False
+    hw_mirror: bool = False
 
 
 @dataclass
@@ -148,6 +149,7 @@ def _scan_field(f: FieldNode) -> CsrFieldModel:
         trap_signal=f.get_property("riscv_trap_signal"),
         save_on_trap=bool(f.get_property("riscv_save_on_trap") or False),
         restore_on_ret=bool(f.get_property("riscv_restore_on_ret") or False),
+        hw_mirror=bool(f.get_property("riscv_hw_mirror") or False),
     )
 
 

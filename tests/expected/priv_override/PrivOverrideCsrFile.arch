@@ -48,7 +48,9 @@ module PrivOverrideCsrFile
     csr.rsp_valid = csr.cmd_valid;
     csr.rsp_rdata = csr.cmd_valid ? csr_rdata_mux : 0;
     hwif_out.mstatus_v = mstatus_r.v;
+    hwif_out.mstatus_rdata_flat = mstatus_r.v;
     hwif_out.debug_peek_v = debug_peek_r.v;
+    hwif_out.debug_peek_rdata_flat = debug_peek_r.v;
   end comb
 
 end module PrivOverrideCsrFile

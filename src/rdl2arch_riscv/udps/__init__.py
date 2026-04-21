@@ -11,6 +11,9 @@ generator consumes:
 - riscv_trap_signal    — one-cycle pulse output when the tagged field is written.
 - riscv_save_on_trap   — auto-written by trap coordinator on trap entry.
 - riscv_restore_on_ret — auto-restored by trap coordinator on xRET.
+- riscv_hw_mirror      — field's storage is a live mirror of an external
+                          signal; generator emits a dedicated input port
+                          on the trap coordinator bypassing hwif_in_live.
 - riscv_intr_clint_role — tags CLINT MMIO regs (msip / mtimecmp_* / mtime_*).
 - riscv_intr_plic_role  — tags PLIC MMIO regs (priority / pending / enable /
                           threshold / claim).
@@ -29,6 +32,7 @@ from .warl import RiscvWarl
 from .wpri import RiscvWpri
 from .trap_signal import RiscvTrapSignal
 from .trap_lifecycle import RiscvSaveOnTrap, RiscvRestoreOnRet
+from .hw_mirror import RiscvHwMirror
 from .clint import RiscvIntrClintRole
 from .plic import RiscvIntrPlicRole
 
@@ -40,6 +44,7 @@ _RISCV_UDPS = [
     RiscvTrapSignal,
     RiscvSaveOnTrap,
     RiscvRestoreOnRet,
+    RiscvHwMirror,
     RiscvIntrClintRole,
     RiscvIntrPlicRole,
 ]

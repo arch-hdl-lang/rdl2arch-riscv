@@ -185,6 +185,116 @@ def test_trap_coord_no_save_fields_still_compiles(tmp_path) -> None:
     assert "hwif_in_drive._reserved" in src
 
 
+def test_trap_coord_hw_mirror_port_and_drive(tmp_path) -> None:
+    """`riscv_hw_mirror = true` on a field makes the generator emit a
+    dedicated `mirror_<reg>_<field>` input port and drive
+    `hwif_in_drive.<member>` from it unconditionally — bypassing
+    `hwif_in_live` and any save/restore gating."""
+    from rdl2arch_riscv.emit_trap_coordinator import emit_trap_coordinator
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0x344;
+                field { sw = r; hw = w; reset = 0;
+                        riscv_wpri = true; } wpri_2_0[2:0];
+                field { sw = r; hw = w; reset = 0;
+                        riscv_hw_mirror = true; } msip[3:3];
+                field { sw = r; hw = w; reset = 0;
+                        riscv_wpri = true; } wpri_hi[31:4];
+            } mip @ 0x0;
+        };
+    """)
+    d = scan(top)
+    src = emit_trap_coordinator(d, "TCsrTrapCoord")
+
+    # mirror_ port declared.
+    assert "port mirror_mip_msip: in UInt<1>;" in src
+    # Mirror field gets the unconditional drive — no trap/xret gating.
+    assert "hwif_in_drive.mip_msip = mirror_mip_msip;" in src
+    # WPRI fields still pass through hwif_in_live.
+    assert (
+        "hwif_in_drive.mip_wpri_2_0 = hwif_in_live.mip_wpri_2_0"
+    ) in src
+
+
+def test_validate_rejects_hw_mirror_without_hw_writable(tmp_path) -> None:
+    from rdl2arch_riscv.validate_csrs import validate, UnsupportedRdlError
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0x344;
+                field { sw = r; hw = r; reset = 0;
+                        riscv_hw_mirror = true; } msip[3:3];
+            } mip @ 0x0;
+        };
+    """)
+    d = scan(top)
+    try:
+        validate(d)
+    except UnsupportedRdlError as e:
+        assert "riscv_hw_mirror" in str(e)
+        assert "hw_writable" in str(e) or "hw = w" in str(e)
+    else:
+        raise AssertionError("expected UnsupportedRdlError for hw_mirror on sw=r;hw=r field")
+
+
+def test_validate_rejects_hw_mirror_with_save_on_trap(tmp_path) -> None:
+    from rdl2arch_riscv.validate_csrs import validate, UnsupportedRdlError
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0x344;
+                field { sw = rw; hw = rw; reset = 0;
+                        riscv_hw_mirror = true;
+                        riscv_save_on_trap = true; } bogus[3:3];
+            } mip @ 0x0;
+        };
+    """)
+    d = scan(top)
+    try:
+        validate(d)
+    except UnsupportedRdlError as e:
+        assert "riscv_hw_mirror" in str(e)
+        assert "save_on_trap" in str(e) or "restore_on_ret" in str(e)
+    else:
+        raise AssertionError("expected UnsupportedRdlError for hw_mirror + save_on_trap")
+
+
+def test_csr_file_emits_reg_rdata_flat(tmp_path) -> None:
+    """Every register gains a `<reg>_rdata_flat: UInt<xlen>` member on
+    hwif_out, driven with the same spec-layout expression the SW
+    readback mux uses. Lets adapters consume register values without
+    depending on packed-struct field-naming conventions."""
+    from rdl2arch_riscv.emit_csr_package import emit_package
+    from rdl2arch_riscv.emit_csr_file import emit_csr_file
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0x304;
+                field { sw = r;  hw = w; reset = 0;
+                        riscv_wpri = true; } wpri_2_0[2:0];
+                field { sw = rw; hw = r; reset = 0; } msie[3:3];
+                field { sw = r;  hw = w; reset = 0;
+                        riscv_wpri = true; } wpri_hi[31:4];
+            } mie @ 0x0;
+        };
+    """)
+    d = scan(top)
+    pkg = emit_package(d)
+    csrfile = emit_csr_file(d)
+    # hwif_out struct declares the flat member.
+    assert "mie_rdata_flat: UInt<32>;" in pkg
+    # CSR file comb-drives it — the spec-layout value is a concat
+    # that includes the `mie.msie` field at bit 3 (our scan-time
+    # expression pads above and below).
+    assert "hwif_out.mie_rdata_flat =" in csrfile
+    # Same expression the SW readback mux uses — containing at
+    # least the storage reference for msie.
+    assert "mie_r.msie" in csrfile
+
+
 def test_trap_coord_restore_on_ret_port_and_mux(tmp_path) -> None:
     """`riscv_restore_on_ret` on a field makes the generator emit a
     `restore_<reg>_<field>` input port and an `xret_enter ? restore_<m>

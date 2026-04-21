@@ -39,9 +39,19 @@ def emit_package(design: CsrDesignModel) -> str:
     lines.append(f"  end struct {design.hwif_in_struct}")
     lines.append("")
 
-    # Hwif out: hw-readable fields become outputs.
-    out_members = [(f"{reg.name}_{f.name}", f.width)
-                   for reg in design.regs for f in reg.fields if f.hw_readable]
+    # Hwif out: hw-readable fields become outputs. Every register also
+    # gets a `<reg>_rdata_flat: UInt<xlen>` member — the spec-layout
+    # view of the whole register (same expression the SW read-path mux
+    # computes). This lets callers consume a register's value without
+    # depending on the packed-struct field-naming convention, so adapter
+    # code is durable against RDL field renames / repacks.
+    xlen = design.xlen
+    out_members: list[tuple[str, int]] = []
+    for reg in design.regs:
+        for f in reg.fields:
+            if f.hw_readable:
+                out_members.append((f"{reg.name}_{f.name}", f.width))
+        out_members.append((f"{reg.name}_rdata_flat", xlen))
     lines.append(f"  struct {design.hwif_out_struct}")
     if out_members:
         for name, w in out_members:

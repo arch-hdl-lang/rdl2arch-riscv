@@ -9,7 +9,12 @@ later phase).
 
 - ✅ Phase 1 — CSR-file module (storage + decode + WPRI / WARL legalization + trap-signal pulses).
 - ✅ Phase 2 — Access-controller module (privilege check + read-only check + per-register priv overrides).
-- ✅ Phase 3 — Trap coordinator. `riscv_save_on_trap` emits a `save_<reg>_<field>: in UInt<W>` port per tagged field + a `trap_enter` pulse; on the enter cycle the TrapCoord muxes `hwif_in_drive` from the save port. `riscv_restore_on_ret` mirrors the same shape on the xret side — `restore_<reg>_<field>: in UInt<W>` + `xret_enter` pulse, priority `trap_enter > xret_enter > hwif_in_live` on fields that carry both tags. The pipeline supplies data; no architecture-specific knowledge lives in the generator.
+- ✅ Phase 3 — Trap coordinator. Three families of generator-emitted ports routing data into `hwif_in_drive`:
+    - `riscv_save_on_trap` — emits `save_<reg>_<field>: in UInt<W>` per tagged field + a `trap_enter` pulse; on the enter cycle the TrapCoord muxes `hwif_in_drive` from the save port.
+    - `riscv_restore_on_ret` — mirrors the save shape on the xret side with `restore_<reg>_<field>: in UInt<W>` + `xret_enter` pulse; priority `trap_enter > xret_enter > hwif_in_live` on fields that carry both tags.
+    - `riscv_hw_mirror` — emits `mirror_<reg>_<field>: in UInt<W>` and drives `hwif_in_drive` unconditionally from it (always-on live mirror of an external wire — `mip.msip ← irq_software_i` etc.). Mutually exclusive with save / restore (the validator rejects mixing event-gated and always-on drives on the same field).
+
+    The pipeline supplies all three kinds of data; the generator only routes / muxes / priority-orders. No architecture-specific knowledge lives in the generator. On the output side, every register also exports a `<reg>_rdata_flat: UInt<xlen>` member on `hwif_out` — the spec-layout view of the whole register (the same expression the SW readback mux returns). Adapters can consume this instead of depending on the per-field packed-struct naming, so they stay durable against RDL field renames / repacks.
 - ✅ Phase 4 — Functional verification stack.
   - ✅ Phase 4a — Pybind arch-sim tests (CSR file + access controller + trap coordinator).
   - ✅ Phase 4b — Integrated-top wrapper (generated at test time) + cocotb/Verilator SV parity.
@@ -87,8 +92,9 @@ RiscvCsrExporter().export(rdlc.elaborate().top, "out/")
 | `riscv_wpri`          | Field                     | `bool` | Reserved bits: reads zero, writes silently discarded |
 | `riscv_warl`          | Field                     | `str` | Bitmask (`"0x1F"`) or enum list (`"0,1,3"`) legalization |
 | `riscv_trap_signal`   | Reg / Field               | `str` | Name of a one-cycle pulse port that asserts on write |
-| `riscv_save_on_trap`  | Field                     | `bool` | Auto-written by trap coordinator on trap entry (wired in Phase 3) |
-| `riscv_restore_on_ret`| Field                     | `bool` | Auto-restored by trap coordinator on xRET (wired in Phase 3) |
+| `riscv_save_on_trap`  | Field                     | `bool` | Auto-written by trap coordinator on trap entry via `save_<reg>_<field>` input port + `trap_enter` pulse |
+| `riscv_restore_on_ret`| Field                     | `bool` | Auto-restored by trap coordinator on xRET via `restore_<reg>_<field>` input port + `xret_enter` pulse |
+| `riscv_hw_mirror`     | Field                     | `bool` | Field storage tracks a live external signal via `mirror_<reg>_<field>` input port; mutually exclusive with save / restore |
 | `riscv_intr_clint_role`| Reg                      | `"msip"` / `"mtimecmp_lo"` / `"mtimecmp_hi"` / `"mtime_lo"` / `"mtime_hi"` | CLINT reg role — used by `RiscvClintExporter` |
 | `riscv_intr_plic_role` | Reg                      | `"priority"` / `"pending"` / `"enable"` / `"threshold"` / `"claim"` | PLIC reg role — used by `RiscvPlicExporter` |
 | `emit_read_pulse`     | Reg                       | `bool` | Upstream rdl2arch UDP; required on PLIC claim regs to drive claim latching |

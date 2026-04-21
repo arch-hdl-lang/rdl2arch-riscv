@@ -145,22 +145,28 @@ addrmap m_trap_ibex {
         // source device: CLINT.mtimecmp write for MTIP, PLIC claim
         // for MEIP, CLINT.msip write for MSIP).
         //
-        // The adapter drives `hwif_in.mip_*` from the live irq_*_i
-        // module inputs every cycle, so SW reads see a one-cycle-
-        // lagged mirror. For the Ibex *controller's* trap-decision
-        // path (`irqs_o = mip & mie_q` upstream), the adapter taps
-        // irq_*_i directly — no storage in the middle — so the
-        // trap-take latency matches upstream exactly.
+        // Each active bit carries `riscv_hw_mirror = true`, so the
+        // generator emits a dedicated `mirror_mip_<field>: in UInt<1>`
+        // port on the TrapCoord. The adapter wires those directly to
+        // the live `irq_*_i` module inputs every cycle, so SW reads
+        // see a one-cycle-lagged mirror. For the Ibex *controller's*
+        // trap-decision path (`irqs_o = mip & mie_q` upstream), the
+        // adapter taps irq_*_i directly — no storage in the middle —
+        // so the trap-take latency matches upstream exactly.
         riscv_csr_addr = 0x344;
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_0_0[0:0];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_2_1[2:1];
-        field { sw = r; hw = w; reset = 0x0; } msip[3:3];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } msip[3:3];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_6_4[6:4];
-        field { sw = r; hw = w; reset = 0x0; } mtip[7:7];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } mtip[7:7];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_10_8[10:8];
-        field { sw = r; hw = w; reset = 0x0; } meip[11:11];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } meip[11:11];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_15_12[15:12];
-        field { sw = r; hw = w; reset = 0x0; } mfip_0[16:16];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } mfip_0[16:16];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:17];
     } mip @ 0x20;
 };

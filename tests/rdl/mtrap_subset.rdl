@@ -95,14 +95,22 @@ addrmap m_trap_csrs {
         // bits from the CLINT (msip, mtip) and PLIC (meip). SW can read
         // but not write — standard behavior for the M-mode bits. Clearing
         // happens by the source device (CLINT mtimecmp write, PLIC claim).
+        //
+        // `riscv_hw_mirror = true` asks the generator to emit a
+        // `mirror_mip_<field>` input port that drives storage every
+        // cycle — the pipeline wires it straight to its live IRQ
+        // source.
         riscv_csr_addr = 0x344;
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_0_0[0:0];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_2_1[2:1];
-        field { sw = r; hw = w; reset = 0x0; } msip[3:3];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } msip[3:3];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_6_4[6:4];
-        field { sw = r; hw = w; reset = 0x0; } mtip[7:7];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } mtip[7:7];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_10_8[10:8];
-        field { sw = r; hw = w; reset = 0x0; } meip[11:11];
+        field { sw = r; hw = w; reset = 0x0;
+                riscv_hw_mirror = true; } meip[11:11];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:12];
     } mip @ 0x1C;
 };
