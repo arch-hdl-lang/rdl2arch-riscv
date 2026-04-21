@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import RDL_DIR
 from sim.driver import CsrPipelineDriver, reset, tick
-from sim.harness import build_sim, fresh_dut
+from sim.harness import fresh_dut
 
 
 pytest.importorskip("pybind11")
@@ -27,13 +26,8 @@ MSCRATCH = 0x340
 
 
 @pytest.fixture(scope="module")
-def csr_so(arch_bin, tmp_path_factory):
-    return build_sim(
-        RDL_DIR / "mtrap_subset.rdl",
-        target="csr_file",
-        out_dir=tmp_path_factory.mktemp("csr_file"),
-        arch_bin=arch_bin,
-    )
+def csr_so(mtrap_sim_build) -> str:
+    return mtrap_sim_build["csr_file"]
 
 
 def test_reset_state_reads_zero(csr_so) -> None:

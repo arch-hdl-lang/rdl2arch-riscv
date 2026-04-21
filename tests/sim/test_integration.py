@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import RDL_DIR
 from sim.driver import reset, tick
-from sim.harness import build_sim, fresh_dut
+from sim.harness import fresh_dut
 
 
 pytest.importorskip("pybind11")
@@ -42,13 +41,8 @@ OP_CLEAR = 0b011
 
 
 @pytest.fixture(scope="module")
-def top_so(arch_bin, tmp_path_factory):
-    return build_sim(
-        RDL_DIR / "mtrap_subset.rdl",
-        target="integrated",
-        out_dir=tmp_path_factory.mktemp("integrated"),
-        arch_bin=arch_bin,
-    )
+def top_so(mtrap_sim_build) -> str:
+    return mtrap_sim_build["integrated"]
 
 
 def _idle(dut) -> None:

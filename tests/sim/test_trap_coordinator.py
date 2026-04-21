@@ -10,21 +10,15 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import RDL_DIR
-from sim.harness import build_sim, fresh_dut
+from sim.harness import fresh_dut
 
 
 pytest.importorskip("pybind11")
 
 
 @pytest.fixture(scope="module")
-def trap_so(arch_bin, tmp_path_factory):
-    return build_sim(
-        RDL_DIR / "mtrap_subset.rdl",
-        target="trap_coord",
-        out_dir=tmp_path_factory.mktemp("trap_mtrap"),
-        arch_bin=arch_bin,
-    )
+def trap_so(mtrap_sim_build) -> str:
+    return mtrap_sim_build["trap_coord"]
 
 
 def _prime_live(dut, **members: int) -> None:
