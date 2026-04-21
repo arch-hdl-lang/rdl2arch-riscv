@@ -13,6 +13,9 @@ module MTrapIbexRiscvTop
   port csr_opcode: in  UInt<3>;
   port cur_priv:   in  UInt<2>;
   port trap_enter: in  Bool;
+  port save_mepc_epc: in UInt<32>;
+  port save_mcause_cause: in UInt<32>;
+  port save_mtval_tval: in UInt<32>;
 
   port granted:    out Bool;
   port illegal:    out Bool;
@@ -30,6 +33,9 @@ module MTrapIbexRiscvTop
   wire hwif_out_w:   MTrapIbexCsrFileHwifOut;
 
   comb
+    hwif_live_w.mepc_epc = 0;
+    hwif_live_w.mcause_cause = 0;
+    hwif_live_w.mtval_tval = 0;
 
     cmd_op_w = csr_opcode[1:0];
     csr_cmd_ready = cmd_ready_w;
@@ -53,6 +59,9 @@ module MTrapIbexRiscvTop
   inst trap: MTrapIbexCsrTrapCoord
     clk <- clk; rst <- rst;
     trap_enter <- trap_enter;
+    save_mepc_epc <- save_mepc_epc;
+    save_mcause_cause <- save_mcause_cause;
+    save_mtval_tval <- save_mtval_tval;
     hwif_in_live  <- hwif_live_w;
     hwif_in_drive -> hwif_drive_w;
   end inst trap

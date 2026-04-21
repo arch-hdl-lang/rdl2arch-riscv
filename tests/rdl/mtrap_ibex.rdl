@@ -2,14 +2,16 @@
 // migrated out of Ibex's `ibex_cs_registers.sv` and onto our generated
 // `CsrFile`. Grows across Phase-6.5 sub-phases:
 //
-//   6.5a — mscratch  (plain RW, no CPU-side side-effects)
-//   6.5b — + mtvec   (plain RW, but also read by Ibex's if_stage via
-//                     `csr_mtvec_o` for trap-PC calc)
-//   6.5c — + mepc/mcause/mtval  (HW-written on trap entry)
-//   6.5d — + mstatus                (auto-clear MIE on trap, restore
-//                                    from MPIE on mret)
-//   6.5e — + mie/mip                (mip is combinational mirror of
-//                                    live IRQ lines)
+//   6.5a — mscratch              (plain RW, no side-effects)
+//   6.5b — + mtvec               (plain RW; exported via csr_mtvec_o)
+//   6.5c — + mepc/mcause/mtval   (HW-written on trap entry — our
+//                                 generated CsrTrapCoord bridges
+//                                 Ibex's `csr_save_cause_i` pulse
+//                                 into the CsrFile's hwif_in)
+//   6.5d — + mstatus             (auto-clear MIE on trap, restore
+//                                 from MPIE on mret)
+//   6.5e — + mie/mip             (mip is combinational mirror of
+//                                 live IRQ lines)
 //
 // Anything not yet in this fixture stays on Ibex's native path inside
 // the forked `ibex_cs_registers_hybrid.sv`.
@@ -36,7 +38,35 @@ addrmap m_trap_ibex {
     } mtvec @ 0x4;
 
     reg {
+        // mepc: WARL bitmask masks bit 0 to zero (RV32 IALIGN=32).
+        // Ibex already drives only aligned PCs into `exception_pc`, so
+        // the HW-save path never tries to write an odd value — the
+        // bitmask is there for direct SW writes via `csrw mepc, ...`.
+        riscv_csr_addr = 0x341;
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_warl = "0xFFFFFFFE";
+                riscv_save_on_trap = true; } epc[31:0];
+    } mepc @ 0x8;
+
+    reg {
+        // mcause: RISC-V spec encodes `{interrupt, 0s, cause[4:0]}`
+        // across all 32 bits. Ibex's internal packed `exc_cause_t`
+        // splits `(irq_ext, irq_int, lower_cause)`; the adapter in
+        // `ibex_cs_registers_hybrid.sv` re-encodes that into the flat
+        // 32-bit shape our CsrFile stores before driving hwif_in.
+        riscv_csr_addr = 0x342;
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_save_on_trap = true; } cause[31:0];
+    } mcause @ 0xC;
+
+    reg {
+        riscv_csr_addr = 0x343;
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_save_on_trap = true; } tval[31:0];
+    } mtval @ 0x10;
+
+    reg {
         riscv_csr_addr = 0x340;
         field { sw = rw; hw = r; reset = 0x0; } value[31:0];
-    } mscratch @ 0x0;
+    } mscratch @ 0x14;
 };
