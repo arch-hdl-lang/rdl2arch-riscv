@@ -91,9 +91,14 @@ def _generate_clint_plic_sv(arch_bin: str, out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     generated: list[Path] = []
 
+    # plic_multictx (2 M-mode contexts) is a strict superset of
+    # plic_basic — single-context tests only ever touch ctx 0, whose
+    # behaviour is identical. Using multictx everywhere lets the
+    # Phase-6.4 multictx_isr test share the SoC build with the
+    # Phase-6.2 / 6.3 ones.
     for rdl_name, exporter_cls in (
         ("clint_basic", RiscvClintExporter),
-        ("plic_basic", RiscvPlicExporter),
+        ("plic_multictx", RiscvPlicExporter),
     ):
         stage = out_dir / rdl_name
         stage.mkdir(exist_ok=True)
