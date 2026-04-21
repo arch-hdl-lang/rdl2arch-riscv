@@ -6,7 +6,9 @@ package MTrapCsrsCsrFilePkg
     Mepc,
     Mcause,
     Mtval,
-    Mscratch
+    Mscratch,
+    Mie,
+    Mip
   end enum MTrapCsrsCsrFileAddr
 
   struct MstatusReg
@@ -41,6 +43,28 @@ package MTrapCsrsCsrFilePkg
     value: UInt<32>;
   end struct MscratchReg
 
+  struct MieReg
+    wpri_0_0: UInt<1>;
+    wpri_2_1: UInt<2>;
+    msie: UInt<1>;
+    wpri_6_4: UInt<3>;
+    mtie: UInt<1>;
+    wpri_10_8: UInt<3>;
+    meie: UInt<1>;
+    wpri_hi: UInt<20>;
+  end struct MieReg
+
+  struct MipReg
+    wpri_0_0: UInt<1>;
+    wpri_2_1: UInt<2>;
+    msip: UInt<1>;
+    wpri_6_4: UInt<3>;
+    mtip: UInt<1>;
+    wpri_10_8: UInt<3>;
+    meip: UInt<1>;
+    wpri_hi: UInt<20>;
+  end struct MipReg
+
   struct MTrapCsrsCsrFileHwifIn
     mstatus_reserved_2_1: UInt<2>;
     mstatus_mie: UInt<1>;
@@ -52,6 +76,19 @@ package MTrapCsrsCsrFilePkg
     mepc_epc: UInt<32>;
     mcause_cause: UInt<32>;
     mtval_tval: UInt<32>;
+    mie_wpri_0_0: UInt<1>;
+    mie_wpri_2_1: UInt<2>;
+    mie_wpri_6_4: UInt<3>;
+    mie_wpri_10_8: UInt<3>;
+    mie_wpri_hi: UInt<20>;
+    mip_wpri_0_0: UInt<1>;
+    mip_wpri_2_1: UInt<2>;
+    mip_msip: UInt<1>;
+    mip_wpri_6_4: UInt<3>;
+    mip_mtip: UInt<1>;
+    mip_wpri_10_8: UInt<3>;
+    mip_meip: UInt<1>;
+    mip_wpri_hi: UInt<20>;
   end struct MTrapCsrsCsrFileHwifIn
 
   struct MTrapCsrsCsrFileHwifOut
@@ -65,6 +102,9 @@ package MTrapCsrsCsrFilePkg
     mcause_cause: UInt<32>;
     mtval_tval: UInt<32>;
     mscratch_value: UInt<32>;
+    mie_msie: UInt<1>;
+    mie_mtie: UInt<1>;
+    mie_meie: UInt<1>;
   end struct MTrapCsrsCsrFileHwifOut
 
   bus MTrapCsrsCsrFileBus

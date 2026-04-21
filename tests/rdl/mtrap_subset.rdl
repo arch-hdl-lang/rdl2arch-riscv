@@ -1,4 +1,5 @@
-// Phase 1 fixture — M-mode trap-handling CSRs.
+// M-mode CSR fixture — trap-handling set plus the interrupt pending/enable
+// pair that couples the CPU to an external interrupt controller.
 //
 // Exercises every UDP on a focused subset:
 //   mstatus  — WPRI reserved bits, WARL MPP, save/restore lifecycle.
@@ -7,6 +8,8 @@
 //   mcause   — plain, save-on-trap.
 //   mtval    — plain, save-on-trap.
 //   mscratch — plain, no RISC-V semantics beyond priv tag.
+//   mie      — per-source interrupt enable bits (sw=rw).
+//   mip      — per-source interrupt pending bits (hw-driven by CLINT/PLIC).
 //
 // Addresses use `riscv_csr_addr` (the RISC-V spec number, e.g. 0x300 for
 // mstatus) directly. The RDL `@` clauses are a dummy-but-required
@@ -68,4 +71,37 @@ addrmap m_trap_csrs {
         riscv_csr_addr = 0x340;
         field { sw = rw; hw = r; reset = 0x0; } value[31:0];
     } mscratch @ 0x14;
+
+    reg {
+        // mie: per-source interrupt enable. SW-writable, HW does not
+        // touch these. Bits not corresponding to a standard interrupt
+        // are WPRI (read-zero, discard writes). This layout covers only
+        // the M-mode sources — S-mode bits would be added for an
+        // HS-capable build.
+        riscv_csr_addr = 0x304;
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_0_0[0:0];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_2_1[2:1];
+        field { sw = rw; hw = r; reset = 0x0; } msie[3:3];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_6_4[6:4];
+        field { sw = rw; hw = r; reset = 0x0; } mtie[7:7];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_10_8[10:8];
+        field { sw = rw; hw = r; reset = 0x0; } meie[11:11];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:12];
+    } mie @ 0x18;
+
+    reg {
+        // mip: per-source interrupt pending. HW drives the three M-mode
+        // bits from the CLINT (msip, mtip) and PLIC (meip). SW can read
+        // but not write — standard behavior for the M-mode bits. Clearing
+        // happens by the source device (CLINT mtimecmp write, PLIC claim).
+        riscv_csr_addr = 0x344;
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_0_0[0:0];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_2_1[2:1];
+        field { sw = r; hw = w; reset = 0x0; } msip[3:3];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_6_4[6:4];
+        field { sw = r; hw = w; reset = 0x0; } mtip[7:7];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_10_8[10:8];
+        field { sw = r; hw = w; reset = 0x0; } meip[11:11];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:12];
+    } mip @ 0x1C;
 };
