@@ -72,6 +72,10 @@ PROGRAMS: list[CpuProgram] = [
         name="mcountinhibit_csrfile",
         cocotb_module="test_mcountinhibit_csrfile",
     ),
+    CpuProgram(
+        name="mcycle_csrfile",
+        cocotb_module="test_mcycle_csrfile",
+    ),
 ]
 
 

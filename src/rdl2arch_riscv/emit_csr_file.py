@@ -165,6 +165,15 @@ def emit_csr_file(design: CsrDesignModel) -> str:
     for sig in trap_signals:
         lines.append(f"  port {sig}: out Bool;")
 
+    # One named input per distinct `riscv_hw_increment_when` enable.
+    increment_enables = sorted({
+        f.hw_increment_when
+        for reg in design.regs for f in reg.fields
+        if f.hw_increment_when
+    })
+    for port in increment_enables:
+        lines.append(f"  port {port}: in Bool;")
+
     lines.append(f"  port hwif_in:  in {design.hwif_in_struct};")
     lines.append(f"  port hwif_out: out {design.hwif_out_struct};")
     lines.append("")
@@ -209,6 +218,41 @@ def emit_csr_file(design: CsrDesignModel) -> str:
                 lines.append(
                     f"    {reg.state_name}.{f.name} <= hwif_in.{reg.name}_{f.name};"
                 )
+
+    # Counter-field increment logic. Fires when the named enable is
+    # high; the SW-write block below runs after this and takes
+    # priority via the seq block's last-write-wins ordering. For
+    # linked high halves, the carry condition is "low counter is at
+    # its max AND the low counter's enable is high" — that's exactly
+    # the cycle where the low half's +1 rolls it over to zero.
+    for reg in design.regs:
+        for f in reg.fields:
+            if f.hw_increment_when:
+                enable = f.hw_increment_when
+                lines.append(f"    if {enable}")
+                lines.append(
+                    f"      {reg.state_name}.{f.name} <= "
+                    f"{reg.state_name}.{f.name} +% 1;"
+                )
+                lines.append(f"    end if")
+            elif f.hw_increment_high_of:
+                low_reg = next(
+                    r for r in design.regs if r.name == f.hw_increment_high_of
+                )
+                low_field = next(
+                    lf for lf in low_reg.fields if lf.hw_increment_when
+                )
+                low_max = f"{low_field.width}'h{'f' * (low_field.width // 4)}"
+                enable = low_field.hw_increment_when
+                lines.append(
+                    f"    if {enable} and ({low_reg.state_name}."
+                    f"{low_field.name} == {low_max})"
+                )
+                lines.append(
+                    f"      {reg.state_name}.{f.name} <= "
+                    f"{reg.state_name}.{f.name} +% 1;"
+                )
+                lines.append(f"    end if")
 
     # Per-register write block. Collect lines per-reg, filtering out regs
     # whose only fields are WPRI or non-sw-writable (nothing to emit).
