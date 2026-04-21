@@ -20,8 +20,11 @@
 #define PLIC_PRIORITY_BASE      (PLIC_BASE + 0x0000)
 #define PLIC_PENDING            (PLIC_BASE + 0x1000)
 #define PLIC_ENABLE_0           (PLIC_BASE + 0x2000)
+#define PLIC_ENABLE_1           (PLIC_BASE + 0x2080)
 #define PLIC_THRESHOLD_0        (PLIC_BASE + 0x200000)
 #define PLIC_CLAIM_0            (PLIC_BASE + 0x200004)
+#define PLIC_THRESHOLD_1        (PLIC_BASE + 0x201000)
+#define PLIC_CLAIM_1            (PLIC_BASE + 0x201004)
 
 // ── mie / mstatus bit masks (RISC-V privileged spec encoding) ───────
 #define MIE_MSIE_MASK           (1 << 3)

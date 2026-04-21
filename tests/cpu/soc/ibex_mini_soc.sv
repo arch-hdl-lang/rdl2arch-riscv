@@ -14,8 +14,9 @@
 //   * simulator_ctrl (shipped with Ibex) for sim output + halt.
 //   * Our generated Clint (AXI4-Lite register block) + ClintLogic
 //     (msip/mtip combinational outputs + mtime counter).
-//   * Our generated Plic (AXI4-Lite register block, 22-bit addr) +
-//     PlicLogic (per-context priority arbiter + claim/complete).
+//   * Our generated PlicMultictx (AXI4-Lite register block, 22-bit
+//     addr, two M-mode contexts — see tests/rdl/plic_multictx.rdl) +
+//     PlicMultictxLogic (per-context priority arbiter + claim/complete).
 //   * Two `obi_to_axi_lite` bridges (one per MMIO device).
 //
 // Memory map (32-bit physical address space)
@@ -31,9 +32,15 @@
 //
 // Interrupt plumbing (RISC-V privileged-spec M-mode pins)
 // -------------------------------------------------------
-//   clint_msip_out  -> ibex.irq_software_i  (mip.msip)
-//   clint_mtip_out  -> ibex.irq_timer_i     (mip.mtip)
-//   plic_intr_out[0]-> ibex.irq_external_i  (mip.meip, ctx 0 = M-mode)
+//   clint_msip_out  -> ibex.irq_software_i     (mip.msip)
+//   clint_mtip_out  -> ibex.irq_timer_i        (mip.mtip)
+//   plic_intr_out[0]-> ibex.irq_external_i     (mip.meip,  cause 11)
+//   plic_intr_out[1]-> ibex.irq_fast_i[0]      (mip.bit16, cause 16)
+//
+// Ibex is an M-only core, so the second PLIC context has no S-mode
+// "SEIP" pin to drive. We repurpose `irq_fast_i[0]` as a stand-in so
+// the multi-context arbitration path is still observable end-to-end.
+// ISRs dispatch on mcause to differentiate the two contexts.
 
 `ifndef RV32M
   `define RV32M ibex_pkg::RV32MFast
@@ -50,7 +57,7 @@
 
 module ibex_mini_soc
   import ClintPkg::*;
-  import PlicPkg::*;
+  import PlicMultictxPkg::*;
 #(
   // Path to a .vmem file loaded into RAM at elab time via $readmemh.
   // Set by cocotb harness / fusesoc parameter. Empty = no preload.
@@ -66,7 +73,8 @@ module ibex_mini_soc
   // Observability for tests (cocotb reads these).
   output logic       clint_mtip_o,
   output logic       clint_msip_o,
-  output logic       plic_meip_o,
+  output logic       plic_meip_o,         // context-0 winner (M-external)
+  output logic       plic_ctx1_irq_o,     // context-1 winner (routed to irq_fast[0])
   output logic [31:0] ibex_pc_o
 );
 
@@ -104,10 +112,12 @@ module ibex_mini_soc
   logic irq_software;
   logic irq_timer;
   logic irq_external;
+  logic irq_ctx1_fast;
 
-  assign clint_msip_o = irq_software;
-  assign clint_mtip_o = irq_timer;
-  assign plic_meip_o  = irq_external;
+  assign clint_msip_o     = irq_software;
+  assign clint_mtip_o     = irq_timer;
+  assign plic_meip_o      = irq_external;
+  assign plic_ctx1_irq_o  = irq_ctx1_fast;
 
   // Debug observability: pull the committed PC out of the tracing wrapper.
   // Wired inside g_tracing below.
@@ -345,12 +355,14 @@ module ibex_mini_soc
     .r_resp_i    (plic_r_resp)
   );
 
-  PlicHwifIn   plic_hwif_in;
-  PlicHwifOut  plic_hwif_out;
-  logic        plic_claim_0_read_pulse;
-  logic        plic_claim_0_write_pulse;
+  PlicMultictxHwifIn   plic_hwif_in;
+  PlicMultictxHwifOut  plic_hwif_out;
+  logic                plic_claim_0_read_pulse;
+  logic                plic_claim_0_write_pulse;
+  logic                plic_claim_1_read_pulse;
+  logic                plic_claim_1_write_pulse;
 
-  Plic u_plic_regblock (
+  PlicMultictx u_plic_regblock (
     .clk                     (clk_sys),
     .rst                     (~rst_sys_n),
     .s_axi_aw_valid          (plic_aw_valid),
@@ -375,7 +387,9 @@ module ibex_mini_soc
     .hwif_in                 (plic_hwif_in),
     .hwif_out                (plic_hwif_out),
     .claim_0_read_pulse      (plic_claim_0_read_pulse),
-    .claim_0_write_pulse     (plic_claim_0_write_pulse)
+    .claim_0_write_pulse     (plic_claim_0_write_pulse),
+    .claim_1_read_pulse      (plic_claim_1_read_pulse),
+    .claim_1_write_pulse     (plic_claim_1_write_pulse)
   );
 
   // PLIC source_in[0] is the reserved "no-source" bit; sources 1..8 are
@@ -383,10 +397,14 @@ module ibex_mini_soc
   logic [8:0] plic_source_in;
   assign plic_source_in = {ext_irq_sources_i, 1'b0};
 
-  logic [0:0] plic_intr_out;
-  assign irq_external = plic_intr_out[0];
+  // One bit per M-mode context. plic_intr_out[0] drives mip.MEIP; we
+  // route plic_intr_out[1] into Ibex's irq_fast_i[0] (mip bit 16 /
+  // cause 16) — Ibex has no S-mode pin, so this is our stand-in.
+  logic [1:0] plic_intr_out;
+  assign irq_external   = plic_intr_out[0];
+  assign irq_ctx1_fast  = plic_intr_out[1];
 
-  PlicLogic u_plic_logic (
+  PlicMultictxLogic u_plic_logic (
     .clk                     (clk_sys),
     .rst                     (~rst_sys_n),
     .source_in               (plic_source_in),
@@ -394,7 +412,9 @@ module ibex_mini_soc
     .hwif_in                 (plic_hwif_in),
     .intr_out                (plic_intr_out),
     .claim_0_read_pulse      (plic_claim_0_read_pulse),
-    .claim_0_write_pulse     (plic_claim_0_write_pulse)
+    .claim_0_write_pulse     (plic_claim_0_write_pulse),
+    .claim_1_read_pulse      (plic_claim_1_read_pulse),
+    .claim_1_write_pulse     (plic_claim_1_write_pulse)
   );
 
   // ── Data-bus response muxing ───────────────────────────────────
@@ -488,7 +508,10 @@ module ibex_mini_soc
     .irq_software_i            (irq_software),
     .irq_timer_i               (irq_timer),
     .irq_external_i            (irq_external),
-    .irq_fast_i                (15'b0),
+    // PLIC context-1 winner piped into fast IRQ 0 (mip bit 16, cause
+    // 16). The remaining 14 fast IRQs are tied off — we only model
+    // one additional external-flavour source in the fixture.
+    .irq_fast_i                ({14'b0, irq_ctx1_fast}),
     .irq_nm_i                  (1'b0),
 
     .scramble_key_valid_i      ('0),
