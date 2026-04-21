@@ -13,6 +13,9 @@ later phase).
 - ✅ Phase 4 — Functional verification stack.
   - ✅ Phase 4a — Pybind arch-sim tests (CSR file + access controller + trap coordinator).
   - ✅ Phase 4b — Integrated-top wrapper (generated at test time) + cocotb/Verilator SV parity.
+- ✅ Phase 5 — Interrupt controllers.
+  - ✅ Phase 5.0 — `mip` / `mie` CSRs in the mtrap fixture.
+  - ✅ Phase 5.1 — CLINT generator (`RiscvClintExporter` emits the MMIO register block + timer/msip logic module). Single-hart; multi-hart and PLIC are follow-ups.
 
 ## Install
 
@@ -71,6 +74,7 @@ RiscvCsrExporter().export(rdlc.elaborate().top, "out/")
 | `riscv_trap_signal`   | Reg / Field               | `str` | Name of a one-cycle pulse port that asserts on write |
 | `riscv_save_on_trap`  | Field                     | `bool` | Auto-written by trap coordinator on trap entry (wired in Phase 3) |
 | `riscv_restore_on_ret`| Field                     | `bool` | Auto-restored by trap coordinator on xRET (wired in Phase 3) |
+| `riscv_intr_clint_role`| Reg                      | `"msip"` / `"mtimecmp_lo"` / `"mtimecmp_hi"` / `"mtime_lo"` / `"mtime_hi"` | CLINT reg role — used by `RiscvClintExporter` |
 
 ## CSR address conventions
 

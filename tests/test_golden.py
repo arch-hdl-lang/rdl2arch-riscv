@@ -19,11 +19,11 @@ from pathlib import Path
 import pytest
 from systemrdl import RDLCompiler
 
-from rdl2arch_riscv import RiscvCsrExporter
+from rdl2arch_riscv import RiscvClintExporter, RiscvCsrExporter
 from rdl2arch_riscv.scan_csrs import scan
 from rdl2arch_riscv.udps import ALL_UDPS
 
-from conftest import RDL_DIR, rdl_fixtures
+from conftest import clint_fixtures, rdl_fixtures
 from sim.integrated_top import emit_integrated_top, integrated_top_name
 
 
@@ -34,14 +34,18 @@ def _update_mode() -> bool:
     return os.environ.get("UPDATE_GOLDEN") == "1"
 
 
-def _generate(rdl_file: Path, out_dir: Path) -> dict[str, str]:
-    """Emit every file that should be golden-checked for one fixture:
-    rdl2arch-riscv's four outputs plus the integrated-top wrapper."""
+def _compile(rdl_file: Path):
     rdlc = RDLCompiler()
     for udp in ALL_UDPS:
         rdlc.register_udp(udp, soft=False)
     rdlc.compile_file(str(rdl_file))
-    root = rdlc.elaborate()
+    return rdlc.elaborate()
+
+
+def _generate_csr(rdl_file: Path, out_dir: Path) -> dict[str, str]:
+    """CSR fixtures emit: pkg + CsrFile + CsrAccess + CsrTrapCoord +
+    integrated-top wrapper."""
+    root = _compile(rdl_file)
     RiscvCsrExporter().export(root.top, str(out_dir))
     design = scan(root.top, xlen=32)
     top_name = integrated_top_name(design)
@@ -49,9 +53,16 @@ def _generate(rdl_file: Path, out_dir: Path) -> dict[str, str]:
     return {p.name: p.read_text() for p in sorted(out_dir.glob("*.arch"))}
 
 
-@pytest.mark.parametrize("rdl_file", rdl_fixtures(), ids=lambda p: p.stem)
-def test_golden(rdl_file: Path, tmp_path: Path) -> None:
-    generated = _generate(rdl_file, tmp_path)
+def _generate_clint(rdl_file: Path, out_dir: Path) -> dict[str, str]:
+    """CLINT fixtures emit: pkg + register block (from rdl2arch) +
+    Logic module (from rdl2arch-riscv)."""
+    root = _compile(rdl_file)
+    RiscvClintExporter().export(root.top, str(out_dir))
+    return {p.name: p.read_text() for p in sorted(out_dir.glob("*.arch"))}
+
+
+def _run_golden(rdl_file: Path, tmp_path: Path, generate_fn) -> None:
+    generated = generate_fn(rdl_file, tmp_path)
     expected_dir = EXPECTED_DIR / rdl_file.stem
 
     if _update_mode():
@@ -79,3 +90,13 @@ def test_golden(rdl_file: Path, tmp_path: Path) -> None:
             f"Run UPDATE_GOLDEN=1 pytest tests/test_golden.py to refresh if "
             f"the change was intentional."
         )
+
+
+@pytest.mark.parametrize("rdl_file", rdl_fixtures(), ids=lambda p: p.stem)
+def test_csr_golden(rdl_file: Path, tmp_path: Path) -> None:
+    _run_golden(rdl_file, tmp_path, _generate_csr)
+
+
+@pytest.mark.parametrize("rdl_file", clint_fixtures(), ids=lambda p: p.stem)
+def test_clint_golden(rdl_file: Path, tmp_path: Path) -> None:
+    _run_golden(rdl_file, tmp_path, _generate_clint)

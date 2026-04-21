@@ -208,3 +208,92 @@ def test_validate_rejects_wpri_and_warl_together(tmp_path) -> None:
     d = scan(top)
     with pytest.raises(UnsupportedRdlError, match="mutually exclusive"):
         validate(d)
+
+
+# ── CLINT UDP + scan/emit ─────────────────────────────────────────────────
+
+
+def test_clint_scan_buckets_regs_by_role(tmp_path) -> None:
+    from rdl2arch_riscv.emit_clint_logic import scan_clint
+    top = _compile_rdl(tmp_path, """
+        addrmap c {
+            reg {
+                riscv_intr_clint_role = "msip";
+                field { sw = rw; hw = r; reset = 0; } value[0:0];
+                field { sw = r;  hw = r; reset = 0; } reserved[31:1];
+            } msip @ 0x0000;
+            reg {
+                riscv_intr_clint_role = "mtimecmp_lo";
+                field { sw = rw; hw = r; reset = 0xFFFFFFFF; } v[31:0];
+            } mtimecmp_lo @ 0x4000;
+            reg {
+                riscv_intr_clint_role = "mtimecmp_hi";
+                field { sw = rw; hw = r; reset = 0xFFFFFFFF; } v[31:0];
+            } mtimecmp_hi @ 0x4004;
+            reg {
+                riscv_intr_clint_role = "mtime_lo";
+                field { sw = rw; hw = rw; reset = 0; } v[31:0];
+            } mtime_lo @ 0xBFF8;
+            reg {
+                riscv_intr_clint_role = "mtime_hi";
+                field { sw = rw; hw = rw; reset = 0; } v[31:0];
+            } mtime_hi @ 0xBFFC;
+        };
+    """)
+    m = scan_clint(top, module_name="C", package_name="CPkg")
+    assert m.msip is not None and m.msip.inst_name == "msip"
+    assert m.mtimecmp_lo is not None and m.mtimecmp_hi is not None
+    assert m.mtime_lo is not None and m.mtime_hi is not None
+
+
+def test_clint_emit_logic_has_expected_ports(tmp_path) -> None:
+    from rdl2arch_riscv.emit_clint_logic import scan_clint, emit_clint_logic
+    top = _compile_rdl(tmp_path, """
+        addrmap c {
+            reg { riscv_intr_clint_role = "msip";
+                  field { sw = rw; hw = r; reset = 0; } value[0:0];
+                  field { sw = r;  hw = r; reset = 0; } reserved[31:1];
+                } msip @ 0x0000;
+            reg { riscv_intr_clint_role = "mtimecmp_lo";
+                  field { sw = rw; hw = r; reset = 0xFFFFFFFF; } v[31:0];
+                } mtimecmp_lo @ 0x4000;
+            reg { riscv_intr_clint_role = "mtimecmp_hi";
+                  field { sw = rw; hw = r; reset = 0xFFFFFFFF; } v[31:0];
+                } mtimecmp_hi @ 0x4004;
+            reg { riscv_intr_clint_role = "mtime_lo";
+                  field { sw = rw; hw = rw; reset = 0; } v[31:0];
+                } mtime_lo @ 0xBFF8;
+            reg { riscv_intr_clint_role = "mtime_hi";
+                  field { sw = rw; hw = rw; reset = 0; } v[31:0];
+                } mtime_hi @ 0xBFFC;
+        };
+    """)
+    m = scan_clint(top, module_name="C", package_name="CPkg")
+    src = emit_clint_logic(m, "CLogic")
+    # Ports
+    for tok in ("port clk:", "port rst:", "port mtime_tick:",
+                "port hwif_out:", "port hwif_in:",
+                "port msip_out:", "port mtip_out:"):
+        assert tok in src, f"missing `{tok}` in:\n{src}"
+    # 64-bit concat + comparator
+    assert "{hwif_out.mtime_hi_v, hwif_out.mtime_lo_v}" in src
+    assert "mtip_out = mtime >= mtimecmp;" in src
+    # msip as passthrough of bit 0
+    assert "msip_out = hwif_out.msip_value != 1'h0;" in src
+
+
+def test_clint_emit_rejects_missing_regs(tmp_path) -> None:
+    import pytest
+    from rdl2arch_riscv.emit_clint_logic import scan_clint, emit_clint_logic
+    top = _compile_rdl(tmp_path, """
+        addrmap c {
+            reg { riscv_intr_clint_role = "msip";
+                  field { sw = rw; hw = r; reset = 0; } value[0:0];
+                  field { sw = r;  hw = r; reset = 0; } reserved[31:1];
+                } msip @ 0x0;
+            // missing mtime* / mtimecmp* entries
+        };
+    """)
+    m = scan_clint(top, module_name="C", package_name="CPkg")
+    with pytest.raises(ValueError, match="mtimecmp"):
+        emit_clint_logic(m, "CLogic")

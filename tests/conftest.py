@@ -34,7 +34,15 @@ def arch_bin() -> str:
 
 
 def rdl_fixtures() -> list[Path]:
-    return sorted(RDL_DIR.glob("*.rdl"))
+    """CSR fixtures consumed by RiscvCsrExporter. CLINT fixtures live
+    alongside and follow the `clint_*.rdl` naming convention — split out
+    so they go through RiscvClintExporter instead."""
+    return sorted(p for p in RDL_DIR.glob("*.rdl")
+                  if not p.name.startswith("clint_"))
+
+
+def clint_fixtures() -> list[Path]:
+    return sorted(RDL_DIR.glob("clint_*.rdl"))
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,119 @@
+use ClintPkg;
+
+bus AxiLite
+  param ADDR_W: const = 16;
+  param DATA_W: const = 32;
+
+  aw_valid: out Bool;
+  aw_ready: in  Bool;
+  aw_addr:  out UInt<ADDR_W>;
+  aw_prot:  out UInt<3>;
+
+  w_valid:  out Bool;
+  w_ready:  in  Bool;
+  w_data:   out UInt<DATA_W>;
+  w_strb:   out UInt<4>;
+
+  b_valid:  in  Bool;
+  b_ready:  out Bool;
+  b_resp:   in  UInt<2>;
+
+  ar_valid: out Bool;
+  ar_ready: in  Bool;
+  ar_addr:  out UInt<ADDR_W>;
+  ar_prot:  out UInt<3>;
+
+  r_valid:  in  Bool;
+  r_ready:  out Bool;
+  r_data:   in  UInt<DATA_W>;
+  r_resp:   in  UInt<2>;
+end bus AxiLite
+
+module Clint
+  port clk:      in Clock<SysDomain>;
+  port rst:      in Reset<Sync>;
+  port s_axi: target AxiLite<ADDR_W=16, DATA_W=32>;
+  port hwif_in:  in ClintHwifIn;
+  port hwif_out: out ClintHwifOut;
+
+  default seq on clk rising;
+
+  reg msip_r: MsipReg reset rst => MsipReg { value: 0, reserved: 0 };
+  reg mtimecmp_lo_r: MtimecmpLoReg reset rst => MtimecmpLoReg { v: 4294967295 };
+  reg mtimecmp_hi_r: MtimecmpHiReg reset rst => MtimecmpHiReg { v: 4294967295 };
+  reg mtime_lo_r: MtimeLoReg reset rst => MtimeLoReg { v: 0 };
+  reg mtime_hi_r: MtimeHiReg reset rst => MtimeHiReg { v: 0 };
+
+  reg bresp_valid_r: Bool reset rst => false;
+  reg rresp_valid_r: Bool reset rst => false;
+  reg rdata_r:       UInt<32> reset rst => 0;
+
+  let wr_fire: Bool = s_axi.aw_valid and s_axi.w_valid and not bresp_valid_r;
+  let rd_fire: Bool = s_axi.ar_valid and not rresp_valid_r;
+
+  let rdata_mux: UInt<32> = match s_axi.ar_addr
+    16'h0 => {msip_r.reserved, msip_r.value},
+    16'h4000 => mtimecmp_lo_r.v,
+    16'h4004 => mtimecmp_hi_r.v,
+    16'hbff8 => mtime_lo_r.v,
+    16'hbffc => mtime_hi_r.v,
+    _ => 0
+  end match;
+
+  seq
+    if bresp_valid_r and s_axi.b_ready
+      bresp_valid_r <= false;
+    end if
+    if wr_fire
+      bresp_valid_r <= true;
+    end if
+    if rresp_valid_r and s_axi.r_ready
+      rresp_valid_r <= false;
+    end if
+    if rd_fire
+      rresp_valid_r <= true;
+    end if
+    mtime_lo_r.v <= hwif_in.mtime_lo_v;
+    mtime_hi_r.v <= hwif_in.mtime_hi_v;
+    if wr_fire
+      if s_axi.aw_addr == 16'h0
+        msip_r.value <= s_axi.w_data[0];
+      end if
+      if s_axi.aw_addr == 16'h4000
+        mtimecmp_lo_r.v <= s_axi.w_data[31:0];
+      end if
+      if s_axi.aw_addr == 16'h4004
+        mtimecmp_hi_r.v <= s_axi.w_data[31:0];
+      end if
+      if s_axi.aw_addr == 16'hbff8
+        mtime_lo_r.v <= s_axi.w_data[31:0];
+      end if
+      if s_axi.aw_addr == 16'hbffc
+        mtime_hi_r.v <= s_axi.w_data[31:0];
+      end if
+    end if
+    if rd_fire
+      rdata_r <= rdata_mux;
+    end if
+  end seq
+
+  comb
+    s_axi.aw_ready = not bresp_valid_r;
+    s_axi.w_ready  = not bresp_valid_r;
+    s_axi.b_valid  = bresp_valid_r;
+    s_axi.b_resp   = 0;
+
+    s_axi.ar_ready = not rresp_valid_r;
+    s_axi.r_valid  = rresp_valid_r;
+    s_axi.r_data   = rdata_r;
+    s_axi.r_resp   = 0;
+
+    hwif_out.msip_value = msip_r.value;
+    hwif_out.msip_reserved = msip_r.reserved;
+    hwif_out.mtimecmp_lo_v = mtimecmp_lo_r.v;
+    hwif_out.mtimecmp_hi_v = mtimecmp_hi_r.v;
+    hwif_out.mtime_lo_v = mtime_lo_r.v;
+    hwif_out.mtime_hi_v = mtime_hi_r.v;
+  end comb
+
+end module Clint

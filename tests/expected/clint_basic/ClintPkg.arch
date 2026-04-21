@@ -1,0 +1,46 @@
+package ClintPkg
+
+  enum ClintCsr
+    Msip,
+    MtimecmpLo,
+    MtimecmpHi,
+    MtimeLo,
+    MtimeHi
+  end enum ClintCsr
+
+  struct MsipReg
+    value: UInt<1>;
+    reserved: UInt<31>;
+  end struct MsipReg
+
+  struct MtimecmpLoReg
+    v: UInt<32>;
+  end struct MtimecmpLoReg
+
+  struct MtimecmpHiReg
+    v: UInt<32>;
+  end struct MtimecmpHiReg
+
+  struct MtimeLoReg
+    v: UInt<32>;
+  end struct MtimeLoReg
+
+  struct MtimeHiReg
+    v: UInt<32>;
+  end struct MtimeHiReg
+
+  struct ClintHwifIn
+    mtime_lo_v: UInt<32>;
+    mtime_hi_v: UInt<32>;
+  end struct ClintHwifIn
+
+  struct ClintHwifOut
+    msip_value: UInt<1>;
+    msip_reserved: UInt<31>;
+    mtimecmp_lo_v: UInt<32>;
+    mtimecmp_hi_v: UInt<32>;
+    mtime_lo_v: UInt<32>;
+    mtime_hi_v: UInt<32>;
+  end struct ClintHwifOut
+
+end package ClintPkg
