@@ -35,6 +35,8 @@ module Plic
   port s_axi: target AxiLite<ADDR_W=22, DATA_W=32>;
   port hwif_in:  in PlicHwifIn;
   port hwif_out: out PlicHwifOut;
+  port claim_0_read_pulse:  out Bool;
+  port claim_0_write_pulse: out Bool;
 
   default seq on clk rising;
 
@@ -90,6 +92,9 @@ module Plic
       if s_axi.aw_addr == 22'h200000
         threshold_0_r.value <= s_axi.w_data[2:0];
       end if
+      if s_axi.aw_addr == 22'h200004
+        claim_0_r.value <= s_axi.w_data[3:0];
+      end if
     end if
     if rd_fire
       rdata_r <= rdata_mux;
@@ -115,6 +120,8 @@ module Plic
     s_axi.r_data   = rdata_r;
     s_axi.r_resp   = 0;
 
+    claim_0_read_pulse  = rd_fire and s_axi.ar_addr == 22'h200004;
+    claim_0_write_pulse = wr_fire and s_axi.aw_addr == 22'h200004;
     hwif_out.priority_0_value = priority_r[0].value;
     hwif_out.priority_0_reserved = priority_r[0].reserved;
     hwif_out.priority_1_value = priority_r[1].value;
@@ -138,6 +145,7 @@ module Plic
     hwif_out.enable_0_reserved = enable_0_r.reserved;
     hwif_out.threshold_0_value = threshold_0_r.value;
     hwif_out.threshold_0_reserved = threshold_0_r.reserved;
+    hwif_out.claim_0_value = claim_0_r.value;
     hwif_out.claim_0_reserved = claim_0_r.reserved;
   end comb
 

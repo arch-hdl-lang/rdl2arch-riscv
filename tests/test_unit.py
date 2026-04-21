@@ -320,8 +320,10 @@ _PLIC_SRC = """
               field { sw = r;  hw = r; reset = 0; } reserved[31:3];
             } threshold_0 @ 0x200000;
         reg { riscv_intr_plic_role = "claim";
-              field { sw = r; hw = w; reset = 0; } value[3:0];
-              field { sw = r; hw = r; reset = 0; } reserved[31:4];
+              emit_read_pulse  = true;
+              emit_write_pulse = true;
+              field { sw = rw; hw = rw; reset = 0; } value[3:0];
+              field { sw = r;  hw = r;  reset = 0; } reserved[31:4];
             } claim_0 @ 0x200004;
     };
 """
@@ -348,16 +350,33 @@ def test_plic_emit_has_arbiter_structure(tmp_path) -> None:
     top = _compile_rdl(tmp_path, _PLIC_SRC)
     m = scan_plic(top, module_name="P", package_name="PPkg")
     src = emit_plic_logic(m, "PLogic")
-    # Per-source candidate flags for sources 1..4 in context 0
+    # Per-source candidate flags for sources 1..4 in context 0. Each
+    # must AND in the !claimed-bit mask so a claimed source can't win
+    # again until the matching complete fires.
     for i in range(1, 5):
         assert f"let c0_cand_{i}: Bool" in src, f"missing c0_cand_{i}:\n{src}"
         assert f"hwif_out.priority_{i}_value" in src, (
             f"missing priority_{i} indexed ref:\n{src}"
         )
-    # Cascade chain for context 0
+        assert f"c0_claimed_r[{i}] == 1'b0" in src, (
+            f"candidate {i} missing !claimed gating:\n{src}"
+        )
+    # Cascade chain for context 0.
     assert "let c0_w1_id:" in src
     assert "let c0_w4_id:" in src
-    # Outputs
+    # Claim/complete scaffolding: pulse ports, in-service reg, delayed pulse,
+    # set/clear masks folded into one seq update.
+    assert "port claim_0_read_pulse:  in Bool;" in src
+    assert "port claim_0_write_pulse: in Bool;" in src
+    assert "reg c0_claimed_r: UInt<5>" in src
+    assert "reg c0_wr_pulse_d: Bool" in src
+    assert "c0_set_mask: UInt<5> = claim_0_read_pulse ? c0_set_bit" in src
+    assert "c0_clr_mask: UInt<5> = c0_wr_pulse_d ? c0_clr_bit" in src
+    assert "c0_wr_pulse_d <= claim_0_write_pulse;" in src
+    assert (
+        "c0_claimed_r <= (c0_claimed_r | c0_set_mask) & (~c0_clr_mask);" in src
+    )
+    # Outputs.
     assert "hwif_in.pending_value = source_in;" in src
     assert "hwif_in.claim_0_value = c0_w4_id;" in src
     # 4 sources → 3-bit ID; single-context fixture → scalar bool-to-UInt<1>.
@@ -378,4 +397,42 @@ def test_plic_emit_rejects_missing_regs(tmp_path) -> None:
     """)
     m = scan_plic(top, module_name="P", package_name="PPkg")
     with pytest.raises(ValueError, match="pending"):
+        emit_plic_logic(m, "PLogic")
+
+
+def test_plic_emit_rejects_claim_without_pulses(tmp_path) -> None:
+    """The generator now hard-requires `emit_read_pulse` and
+    `emit_write_pulse` on each claim reg — the emitted logic relies on
+    the pulses to latch / clear the in-service state. A plain read-only
+    claim (the old Phase 5.2 shape) is rejected with a pointer at the
+    UDP the user needs to add."""
+    import pytest
+    from rdl2arch_riscv.emit_plic_logic import scan_plic, emit_plic_logic
+    top = _compile_rdl(tmp_path, """
+        addrmap p {
+            reg { riscv_intr_plic_role = "priority";
+                  field { sw = rw; hw = r; reset = 0; } value[2:0];
+                  field { sw = r;  hw = r; reset = 0; } reserved[31:3];
+                } priority[3] @ 0x0;
+            reg { riscv_intr_plic_role = "pending";
+                  field { sw = r; hw = w; reset = 0; } value[2:0];
+                  field { sw = r; hw = r; reset = 0; } reserved[31:3];
+                } pending @ 0x1000;
+            reg { riscv_intr_plic_role = "enable";
+                  field { sw = rw; hw = r; reset = 0; } value[2:0];
+                  field { sw = r;  hw = r; reset = 0; } reserved[31:3];
+                } enable_0 @ 0x2000;
+            reg { riscv_intr_plic_role = "threshold";
+                  field { sw = rw; hw = r; reset = 0; } value[2:0];
+                  field { sw = r;  hw = r; reset = 0; } reserved[31:3];
+                } threshold_0 @ 0x200000;
+            // Missing both pulses.
+            reg { riscv_intr_plic_role = "claim";
+                  field { sw = r; hw = w; reset = 0; } value[2:0];
+                  field { sw = r; hw = r; reset = 0; } reserved[31:3];
+                } claim_0 @ 0x200004;
+        };
+    """)
+    m = scan_plic(top, module_name="P", package_name="PPkg")
+    with pytest.raises(ValueError, match="emit_read_pulse"):
         emit_plic_logic(m, "PLogic")

@@ -46,8 +46,10 @@ addrmap plic_multictx {
 
     reg {
         riscv_intr_plic_role = "claim";
-        field { sw = r; hw = w; reset = 0x0; } value[3:0];
-        field { sw = r; hw = r; reset = 0x0; } reserved[31:4];
+        emit_read_pulse  = true;
+        emit_write_pulse = true;
+        field { sw = rw; hw = rw; reset = 0x0; } value[3:0];
+        field { sw = r;  hw = r;  reset = 0x0; } reserved[31:4];
     } claim_0 @ 0x200004;
 
     reg {
@@ -58,7 +60,9 @@ addrmap plic_multictx {
 
     reg {
         riscv_intr_plic_role = "claim";
-        field { sw = r; hw = w; reset = 0x0; } value[3:0];
-        field { sw = r; hw = r; reset = 0x0; } reserved[31:4];
+        emit_read_pulse  = true;
+        emit_write_pulse = true;
+        field { sw = rw; hw = rw; reset = 0x0; } value[3:0];
+        field { sw = r;  hw = r;  reset = 0x0; } reserved[31:4];
     } claim_1 @ 0x201004;
 };

@@ -2,19 +2,37 @@
 
 Generic rdl2arch emits the MMIO register block (priority / pending /
 enable / threshold / claim). This module emits the sibling that does
-priority arbitration over the source bitmap each cycle and drives
-both `hwif_in.claim_value` (winner ID, read by SW) and `meip_out`
-(→ CSR file's `mip.meip`).
+priority arbitration over the source bitmap each cycle AND runs the
+spec-compliant claim / complete handshake, driving both
+`hwif_in.claim_<ctx>_value` (winner ID, read by SW) and
+`intr_out` (→ CSR file's `mip.meip` / `mip.seip`).
 
-v1 arbitration: for each source `i` in 1..N,
-    candidate[i] = source_in[i] && enable[i] && priority[i] > threshold
-The winner is the candidate with the highest priority, breaking ties
-toward the lowest ID. Emitted as a linear cascade of `let` bindings —
-unrolled per source count at generation time. N=8 gives ~8 tuples of
-`(id, prio)` state, plus one `comb` block tying it together.
+Arbitration: for each source `i` in 1..N and each context `ctx`,
+    cand[ctx][i] = source_in[i] && enable[ctx][i]
+                   && priority[i] > threshold[ctx]
+                   && !claimed[ctx][i]
+The winner per context is the candidate with the highest priority,
+breaking ties toward the lowest ID. Emitted as a linear cascade of
+`let` bindings, unrolled per source count at generation time.
 
-Scope limits (documented in `udps/plic.py`): single context,
-level-triggered sources, read-only claim.
+Claim / complete (SiFive semantics, consumed via the upstream rdl2arch
+`emit_read_pulse` / `emit_write_pulse` UDPs):
+
+  * SW **read** of the per-context claim register
+    → 1-cycle `claim_<ctx>_read_pulse` pulse → the logic module latches
+      `claimed[ctx][hwif_out.claim_<ctx>_value] <= 1`, masking that
+      source from further arbitration on this context.
+
+  * SW **write** of the same register
+    → 1-cycle `claim_<ctx>_write_pulse` pulse → delayed internally by
+      one cycle so the storage update has propagated into
+      `hwif_out.claim_<ctx>_value` → the logic module clears the
+      matching in-service bit, re-enabling that source.
+
+Scope limits (documented in `udps/plic.py`):
+  * Level-triggered sources only — `pending` is a straight passthrough
+    of `source_in`, no edge detection.
+  * Edge detection and S-mode delegation are scoped to follow-ups.
 """
 
 from __future__ import annotations
@@ -124,6 +142,21 @@ def _validate(model: PlicModel) -> None:
             "beyond the reserved source 0 (saw "
             f"{len(model.priorities)} total)."
         )
+    # Each claim reg MUST opt in to both pulse UDPs — the logic module
+    # relies on read / write pulses to drive the claim / complete state.
+    for ctx, claim in enumerate(model.claims):
+        if not bool(claim.get_property("emit_read_pulse") or False):
+            raise ValueError(
+                f"PLIC claim reg `{claim.inst_name}` (context {ctx}) must "
+                f"set `emit_read_pulse = true;` — the logic module uses "
+                f"the read pulse to latch the claim (in-service) bit."
+            )
+        if not bool(claim.get_property("emit_write_pulse") or False):
+            raise ValueError(
+                f"PLIC claim reg `{claim.inst_name}` (context {ctx}) must "
+                f"set `emit_write_pulse = true;` — the logic module uses "
+                f"the write pulse to clear the in-service bit on complete."
+            )
 
 
 def _reg_field_name(reg: RegNode, field_inst_name: str) -> str:
@@ -145,9 +178,11 @@ def _reg_field_name(reg: RegNode, field_inst_name: str) -> str:
 def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
     """Generate the PlicLogic .arch source.
 
-    Emits one arbitration cascade per context; the winner per context is
-    packed into a single `intr_out: out UInt<N_contexts>` port (bit i =
-    context i's meip/seip/... output).
+    Emits one arbitration cascade per context, an `in-service` state
+    register per context (cleared on reset, set by a claim read, cleared
+    by the matching complete write), and packs the per-context winner
+    into a single `intr_out: out UInt<N_contexts>` port (bit i = context
+    i's meip/seip/... output).
     """
     _validate(model)
 
@@ -172,9 +207,26 @@ def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
     def prio_hwif(i: int) -> str:
         return _reg_field_name(model.priorities[i], priority_fld)
 
+    # Pulse port names come straight from the RDL reg's inst_name — matches
+    # how rdl2arch's emit_regblock names the emitted output ports.
+    def claim_read_pulse(ctx: int) -> str:
+        return f"{model.claims[ctx].inst_name}_read_pulse"
+    def claim_write_pulse(ctx: int) -> str:
+        return f"{model.claims[ctx].inst_name}_write_pulse"
+
     # Winner-ID width: enough to hold values 0..n.
     id_w = max(1, n.bit_length())
     prio_w = 3  # fixture-chosen; generator could derive from RDL width.
+
+    # In-service bitmap width (one bit per source ID, incl. the reserved 0).
+    bits = n + 1
+    # Hex digits needed to write a `bits`-wide literal.
+    hex_digits = (bits + 3) // 4
+
+    def claim_mask_lit(i: int) -> str:
+        """`{bits}'h<hex>` for 1<<i — used in the set / clear match arms."""
+        return f"{bits}'h{(1 << i):0{hex_digits}x}"
+    zero_mask = f"{bits}'h{0:0{hex_digits}x}"
 
     lines: list[str] = []
     lines.append(f"use {model.package_name};")
@@ -186,17 +238,38 @@ def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
     lines.append(f"  port hwif_out:  in  {model.hwif_out_struct};")
     lines.append(f"  port hwif_in:   out {model.hwif_in_struct};")
     lines.append(f"  port intr_out:  out UInt<{n_ctx}>;")
+    # Pulse inputs from the register block — one read + one write per context.
+    for ctx in range(n_ctx):
+        lines.append(f"  port {claim_read_pulse(ctx)}:  in Bool;")
+        lines.append(f"  port {claim_write_pulse(ctx)}: in Bool;")
+    lines.append("")
+    lines.append("  default seq on clk rising;")
     lines.append("")
 
-    # Per-context arbitration cascade.
+    # In-service state + 1-cycle delayed write pulse per context.
+    for ctx in range(n_ctx):
+        lines.append(
+            f"  reg c{ctx}_claimed_r: UInt<{bits}> reset rst => {zero_mask};"
+        )
+        lines.append(
+            f"  reg c{ctx}_wr_pulse_d: Bool reset rst => false;"
+        )
+    lines.append("")
+
+    # Per-context arbitration cascade + claim/complete bookkeeping.
     for ctx in range(n_ctx):
         lines.append(f"  // ── context {ctx} ──")
+        # Candidates: source pending & enabled & priority > threshold
+        # & not currently in service on this context.
         for i in range(1, n + 1):
             lines.append(
                 f"  let c{ctx}_cand_{i}: Bool = source_in[{i}] and "
                 f"hwif_out.{enable_hwif(ctx)}[{i}] and "
-                f"(hwif_out.{prio_hwif(i)} > hwif_out.{threshold_hwif(ctx)});"
+                f"(hwif_out.{prio_hwif(i)} > hwif_out.{threshold_hwif(ctx)}) "
+                f"and (c{ctx}_claimed_r[{i}] == 1'b0);"
             )
+        # Cascade: running-best (id, prio) tuple, lowest-ID tiebreak via
+        # strict `>` on update.
         lines.append(
             f"  let c{ctx}_w1_id:   UInt<{id_w}> = c{ctx}_cand_1 ? {id_w}'h1 : {id_w}'h0;"
         )
@@ -217,7 +290,49 @@ def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
                 f"  let c{ctx}_w{i}_prio: UInt<{prio_w}> = c{ctx}_w{i}_take ? "
                 f"hwif_out.{prio_hwif(i)} : c{ctx}_w{i-1}_prio;"
             )
+        # Claim set mask — derived from the current stored claim reg
+        # value (= the winner HW drove into storage last cycle, and
+        # therefore the value SW sees on the read). Emitted as an
+        # unrolled match so we don't rely on runtime-variable shifts.
+        lines.append(
+            f"  let c{ctx}_set_bit: UInt<{bits}> = match hwif_out.{claim_hwif(ctx)}"
+        )
+        for i in range(1, n + 1):
+            lines.append(f"    {id_w}'h{i:x} => {claim_mask_lit(i)},")
+        lines.append(f"    _    => {zero_mask}")
+        lines.append("  end match;")
+        lines.append(
+            f"  let c{ctx}_set_mask: UInt<{bits}> = "
+            f"{claim_read_pulse(ctx)} ? c{ctx}_set_bit : {zero_mask};"
+        )
+        # Complete clear mask — 1-cycle delayed so the SW-written ID
+        # has propagated through storage into hwif_out.
+        lines.append(
+            f"  let c{ctx}_clr_bit: UInt<{bits}> = match hwif_out.{claim_hwif(ctx)}"
+        )
+        for i in range(1, n + 1):
+            lines.append(f"    {id_w}'h{i:x} => {claim_mask_lit(i)},")
+        lines.append(f"    _    => {zero_mask}")
+        lines.append("  end match;")
+        lines.append(
+            f"  let c{ctx}_clr_mask: UInt<{bits}> = "
+            f"c{ctx}_wr_pulse_d ? c{ctx}_clr_bit : {zero_mask};"
+        )
         lines.append("")
+
+    # Sequential updates — delay the write pulse one cycle and fold both
+    # set and clear masks into the in-service state.
+    lines.append("  seq")
+    for ctx in range(n_ctx):
+        lines.append(
+            f"    c{ctx}_wr_pulse_d <= {claim_write_pulse(ctx)};"
+        )
+        lines.append(
+            f"    c{ctx}_claimed_r <= "
+            f"(c{ctx}_claimed_r | c{ctx}_set_mask) & (~c{ctx}_clr_mask);"
+        )
+    lines.append("  end seq")
+    lines.append("")
 
     lines.append("  comb")
     # Pending register passthrough — SW-visible view of source_in.

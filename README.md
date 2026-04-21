@@ -16,8 +16,9 @@ later phase).
 - ✅ Phase 5 — Interrupt controllers.
   - ✅ Phase 5.0 — `mip` / `mie` CSRs in the mtrap fixture.
   - ✅ Phase 5.1 — CLINT generator (`RiscvClintExporter` emits the MMIO register block + timer/msip logic module). Single-hart; multi-hart is a follow-up.
-  - ✅ Phase 5.2 — PLIC generator (`RiscvPlicExporter` emits the MMIO register block + priority-arbitration logic module). Level-triggered, read-only claim.
+  - ✅ Phase 5.2 — PLIC generator (`RiscvPlicExporter` emits the MMIO register block + priority-arbitration logic module). Level-triggered sources.
   - ✅ Phase 5.2a — Multi-context PLIC. Arbiter replicates per context; output is a `UInt<N_contexts>` bitmap. Fixtures shipped: `plic_basic` (1 context), `plic_multictx` (2 contexts: M + S).
+  - ✅ Phase 5.2b — Spec-compliant claim / complete. Per-context in-service bitmap: a SW **read** of the claim reg latches the returned source as in-service (masks it from further arbitration on this context); a SW **write** clears the matching bit. Consumes upstream `emit_read_pulse` / `emit_write_pulse` UDPs so no side-channel is needed. Edge detection remains a follow-up.
 
 ## Install
 
@@ -78,6 +79,8 @@ RiscvCsrExporter().export(rdlc.elaborate().top, "out/")
 | `riscv_restore_on_ret`| Field                     | `bool` | Auto-restored by trap coordinator on xRET (wired in Phase 3) |
 | `riscv_intr_clint_role`| Reg                      | `"msip"` / `"mtimecmp_lo"` / `"mtimecmp_hi"` / `"mtime_lo"` / `"mtime_hi"` | CLINT reg role — used by `RiscvClintExporter` |
 | `riscv_intr_plic_role` | Reg                      | `"priority"` / `"pending"` / `"enable"` / `"threshold"` / `"claim"` | PLIC reg role — used by `RiscvPlicExporter` |
+| `emit_read_pulse`     | Reg                       | `bool` | Upstream rdl2arch UDP; required on PLIC claim regs to drive claim latching |
+| `emit_write_pulse`    | Reg                       | `bool` | Upstream rdl2arch UDP; required on PLIC claim regs to drive complete clearing |
 
 ## CSR address conventions
 
