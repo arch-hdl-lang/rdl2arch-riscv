@@ -28,6 +28,19 @@
 //                                 1-cycle lagged, which is fine
 //                                 for `csrr t0, mip` inside a
 //                                 handler.)
+//   6.6a — + mcountinhibit       (plain RW. Bits: cy (0) + ir (2)
+//                                 gate mcycle / minstret; HPM
+//                                 bits [12:3] gate the optional
+//                                 HPM counters 3..12 that our
+//                                 Ibex config (MHPMCounterNum=10)
+//                                 still keeps on upstream's path.
+//                                 Bit 1 / bits [31:13] are WPRI.
+//                                 The adapter consumes the whole
+//                                 register as a 32-bit view via
+//                                 `hwif_out.mcountinhibit_rdata_flat`
+//                                 — the HPM counter increment
+//                                 blocks still reference
+//                                 `mcountinhibit[N]` unchanged.)
 //
 // Anything not yet in this fixture stays on Ibex's native path inside
 // the forked `ibex_cs_registers_hybrid.sv`.
@@ -169,4 +182,29 @@ addrmap m_trap_ibex {
                 riscv_hw_mirror = true; } mfip_0[16:16];
         field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:17];
     } mip @ 0x20;
+
+    reg {
+        // mcountinhibit — per-counter inhibit bits.
+        //
+        //   bit  0  cy   — inhibit mcycle
+        //   bit  1  tm   — reserved (timer, not mcounter)
+        //   bit  2  ir   — inhibit minstret
+        //   bits 3..12   — inhibit mhpmcounter3..mhpmcounter12
+        //                  (Ibex's MHPMCounterNum=10 on our config,
+        //                   so 10 HPM counters are instantiated
+        //                   upstream-side)
+        //   bits 13..31  — WPRI
+        //
+        // The HPM counters themselves aren't migrated onto the
+        // generator; only their inhibit control moves here. The
+        // adapter drives `mcountinhibit` (the wire consumed by the
+        // HPM increment-gating logic) from our CsrFile's flat
+        // spec-layout view.
+        riscv_csr_addr = 0x320;
+        field { sw = rw; hw = r; reset = 0x0; } cy[0:0];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } reserved_tm[1:1];
+        field { sw = rw; hw = r; reset = 0x0; } ir[2:2];
+        field { sw = rw; hw = r; reset = 0x0; } hpm[12:3];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } reserved_hi[31:13];
+    } mcountinhibit @ 0x24;
 };

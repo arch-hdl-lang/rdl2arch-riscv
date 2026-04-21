@@ -47,5 +47,7 @@ module MTrapIbexCsrTrapCoord
     hwif_in_drive.mip_wpri_15_12 = hwif_in_live.mip_wpri_15_12;
     hwif_in_drive.mip_mfip_0 = mirror_mip_mfip_0;
     hwif_in_drive.mip_wpri_hi = hwif_in_live.mip_wpri_hi;
+    hwif_in_drive.mcountinhibit_reserved_tm = hwif_in_live.mcountinhibit_reserved_tm;
+    hwif_in_drive.mcountinhibit_reserved_hi = hwif_in_live.mcountinhibit_reserved_hi;
   end comb
 end module MTrapIbexCsrTrapCoord
