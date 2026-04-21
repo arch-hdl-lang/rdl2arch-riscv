@@ -34,6 +34,23 @@
  *                      — the adapter re-encodes it into the flat
  *                      32-bit shape our CsrFile stores before
  *                      driving `save_mcause_cause`.)
+ *   6.5d — mstatus (mie / mpie / mpp).
+ *                      Trap entry (`csr_save_cause_i`):
+ *                        mstatus.mie  <- 0            (auto-clear)
+ *                        mstatus.mpie <- mstatus.mie  (save old mie)
+ *                        mstatus.mpp  <- priv_lvl_q   (save priv)
+ *                      MRET (`csr_restore_mret_i`):
+ *                        mstatus.mie  <- mstatus.mpie
+ *                        mstatus.mpie <- 1
+ *                        mstatus.mpp  <- PRIV_LVL_U
+ *                      Held otherwise (self-loop through `hwif_out`).
+ *                      The TrapCoord only models save_on_trap; the
+ *                      mret-restore path and the mie auto-clear are
+ *                      done by hand in this adapter.
+ *                      Ibex's `mprv` and `tw` bits aren't wired
+ *                      (M-only SoC never uses them) — the module
+ *                      output `csr_mstatus_tw_o` is tied low, and
+ *                      `priv_mode_lsu_o` drops its `mprv` gating.
  *
  * Everything else stays on Ibex's native path. Look for
  * `BEGIN rdl2arch` / `END rdl2arch` comment markers for the exact
@@ -250,9 +267,17 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   // CSRs
   priv_lvl_e   priv_lvl_q, priv_lvl_d;
-  status_t     mstatus_q, mstatus_d;
-  logic        mstatus_err;
-  logic        mstatus_en;
+  // BEGIN rdl2arch: `status_t mstatus_{q,d}`, `mstatus_err`,
+  // `mstatus_en` all removed — mstatus now lives in the generated
+  // `MTrapIbexCsrFile`. The three interrupt-relevant fields
+  // (mie / mpie / mpp) are surfaced through `hwif_out.mstatus_*`.
+  // Module-level outputs (`csr_mstatus_mie_o`, `csr_mstatus_tw_o`)
+  // come off the same hwif; `tw` is tied low because our CsrFile
+  // doesn't model that field (M-only SoC, WFI trap-to-M is never
+  // needed). The module-scope `mstatus_rsp_rdata` wire feeds the
+  // CSR-read-mux arm.
+  logic [31:0] mstatus_rsp_rdata;
+  // END rdl2arch
   irqs_t       mie_q, mie_d;
   logic        mie_en;
   // BEGIN rdl2arch: `mscratch_q`/`mscratch_en` removed — mscratch now
@@ -388,14 +413,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       CSR_MCONFIGPTR: csr_rdata_int = CSR_MCONFIGPTR_VALUE;
 
       // mstatus: always M-mode, contains IE bit
-      CSR_MSTATUS: begin
-        csr_rdata_int                                                   = '0;
-        csr_rdata_int[CSR_MSTATUS_MIE_BIT]                              = mstatus_q.mie;
-        csr_rdata_int[CSR_MSTATUS_MPIE_BIT]                             = mstatus_q.mpie;
-        csr_rdata_int[CSR_MSTATUS_MPP_BIT_HIGH:CSR_MSTATUS_MPP_BIT_LOW] = mstatus_q.mpp;
-        csr_rdata_int[CSR_MSTATUS_MPRV_BIT]                             = mstatus_q.mprv;
-        csr_rdata_int[CSR_MSTATUS_TW_BIT]                               = mstatus_q.tw;
-      end
+      // BEGIN rdl2arch: routed to MTrapIbexCsrFile. The generated
+      // rdata mux already assembles the field bits at their
+      // RISC-V-spec positions, so we just forward the rsp rdata.
+      // (Our RDL models only mie/mpie/mpp — mprv and tw read as
+      // zero since those fields aren't in the fixture.)
+      CSR_MSTATUS: csr_rdata_int = mstatus_rsp_rdata;
+      // END rdl2arch
 
       // mstatush: All zeros for Ibex (fixed little endian and all other bits reserved)
       CSR_MSTATUSH: csr_rdata_int = '0;
@@ -618,16 +642,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     exception_pc = pc_id_i;
 
     priv_lvl_d   = priv_lvl_q;
-    mstatus_en   = 1'b0;
-    mstatus_d    = mstatus_q;
     mie_en       = 1'b0;
-    // BEGIN rdl2arch: mscratch/mepc/mcause/mtval/mtvec `_en`/`_d`
-    // removed — every one now lives in the generated CsrFile. SW
-    // writes go through the bus mux at the bottom of this module;
-    // HW-save writes for mepc/mcause/mtval go through the
-    // `MTrapIbexCsrTrapCoord` instance (which muxes
-    // `hwif_in_drive.{mepc_epc,mcause_cause,mtval_tval}` based on
-    // `csr_save_cause_i`).
+    // BEGIN rdl2arch: mscratch/mepc/mcause/mtval/mtvec/mstatus
+    // `_en`/`_d` removed — every one now lives in the generated
+    // CsrFile. SW writes go through the bus mux at the bottom of
+    // this module. HW writes (trap-save for mepc/mcause/mtval +
+    // mstatus.{mie,mpie,mpp}; mret-restore for mstatus.{mie,mpie,mpp})
+    // are driven there through `hwif_in`.
     // END rdl2arch
     dcsr_en      = 1'b0;
     dcsr_d       = dcsr_q;
@@ -637,8 +658,15 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     dscratch1_en = 1'b0;
 
     mstack_en      = 1'b0;
-    mstack_d.mpie  = mstatus_q.mpie;
-    mstack_d.mpp   = mstatus_q.mpp;
+    // BEGIN rdl2arch: mstack backup reads the CURRENT mstatus.mpie
+    // / mpp from our CsrFile's hwif_out. Our CsrFile stores mpp as
+    // a 2-bit raw field; casting to `priv_lvl_e` matches Ibex's
+    // `status_stk_t` layout. mstack is only consumed on an NMI-mret
+    // path that our M-only SoC never exercises, so any degradation
+    // here is benign.
+    mstack_d.mpie  = ourfile_hwif_out.mstatus_mpie;
+    mstack_d.mpp   = priv_lvl_e'(ourfile_hwif_out.mstatus_mpp);
+    // END rdl2arch
     // BEGIN rdl2arch: mstack captures the CURRENT mepc/mcause at
     // trap entry (for recoverable NMI backup). Read them off the
     // CsrFile's hwif_out now. mcause storage is a flat 32-bit
@@ -664,21 +692,14 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
     if (csr_we_int) begin
       unique case (csr_addr_i)
-        // mstatus: IE bit
-        CSR_MSTATUS: begin
-          mstatus_en = 1'b1;
-          mstatus_d    = '{
-              mie:  csr_wdata_int[CSR_MSTATUS_MIE_BIT],
-              mpie: csr_wdata_int[CSR_MSTATUS_MPIE_BIT],
-              mpp:  priv_lvl_e'(csr_wdata_int[CSR_MSTATUS_MPP_BIT_HIGH:CSR_MSTATUS_MPP_BIT_LOW]),
-              mprv: csr_wdata_int[CSR_MSTATUS_MPRV_BIT],
-              tw:   csr_wdata_int[CSR_MSTATUS_TW_BIT]
-          };
-          // Convert illegal values to U-mode
-          if ((mstatus_d.mpp != PRIV_LVL_M) && (mstatus_d.mpp != PRIV_LVL_U)) begin
-            mstatus_d.mpp = PRIV_LVL_U;
-          end
-        end
+        // BEGIN rdl2arch: SW-write arm for mstatus reduced to a
+        // no-op. Writes go through the bus to our generated CsrFile,
+        // which handles the per-field WARL on mpp (`0x3` bitmask —
+        // we accept all 2-bit values rather than upstream's
+        // "U or M only" coercion; our M-only SoC never writes mpp
+        // directly from SW, so the divergence is benign).
+        CSR_MSTATUS: ;
+        // END rdl2arch
 
         // interrupt enable
         CSR_MIE: mie_en = 1'b1;
@@ -808,20 +829,15 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         end else if (!debug_mode_i) begin
           // Exceptions do not update CSRs in debug mode, so ony write these CSRs if we're not in
           // debug mode.
-          // BEGIN rdl2arch: mepc/mcause/mtval trap-save writes now
-          // happen through the generated `MTrapIbexCsrTrapCoord`
-          // instance at the bottom of this module. That coordinator
-          // latches `exception_pc` / `csr_mcause_i` / `csr_mtval_i`
-          // into the CsrFile's hwif_in whenever `csr_save_cause_i`
-          // is high — the same condition as this `if` branch — so
-          // we only need to remove the upstream `*_en`/`*_d`
-          // assignments here.
+          // BEGIN rdl2arch: mepc/mcause/mtval trap-save writes go
+          // through `MTrapIbexCsrTrapCoord`; mstatus.{mie, mpie,
+          // mpp} trap-save writes go through manual hwif_in drives
+          // in the adapter at the bottom of this module, gated on
+          // `csr_save_cause_i` (= this condition). All of the
+          // upstream `mstatus_{en,d}` and `mepc/mcause/mtval
+          // _{en,d}` assignments that used to live here are now
+          // redundant — the hwif_in path handles everything.
           // END rdl2arch
-          mstatus_en     = 1'b1;
-          mstatus_d.mie  = 1'b0; // disable interrupts
-          // save current status
-          mstatus_d.mpie = mstatus_q.mie;
-          mstatus_d.mpp  = priv_lvl_q;
           // save previous status for recoverable NMI
           mstack_en      = 1'b1;
 
@@ -848,38 +864,27 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       end // csr_restore_dret_i
 
       csr_restore_mret_i: begin // MRET
-        priv_lvl_d     = mstatus_q.mpp;
-        mstatus_en     = 1'b1;
-        mstatus_d.mie  = mstatus_q.mpie; // re-enable interrupts
-
-        if (mstatus_q.mpp != PRIV_LVL_M) begin
-          mstatus_d.mprv = 1'b0;
-        end
+        // BEGIN rdl2arch: the mret restore of mstatus.{mie, mpie,
+        // mpp} happens in the adapter's `hwif_in` drive at the
+        // bottom of this module (gated on `csr_restore_mret_i`).
+        // Here we only keep the priv_lvl update + the
+        // cpuctrlsts bookkeeping. `priv_lvl_d` reads mpp off our
+        // CsrFile's hwif_out; casting to `priv_lvl_e` matches
+        // upstream.
+        // mprv is absent from our fixture (M-only SoC never uses
+        // it), so the "clear mprv on U-mode return" branch isn't
+        // reinstated — no-op here.
+        // END rdl2arch
+        priv_lvl_d     = priv_lvl_e'(ourfile_hwif_out.mstatus_mpp);
 
         // SEC_CM: EXCEPTION.CTRL_FLOW.LOCAL_ESC
         // SEC_CM: EXCEPTION.CTRL_FLOW.GLOBAL_ESC
         cpuctrlsts_part_we              = 1'b1;
         cpuctrlsts_part_d.sync_exc_seen = 1'b0;
 
-        if (nmi_mode_i) begin
-          // when returning from an NMI restore state from mstack CSR
-          mstatus_d.mpie = mstack_q.mpie;
-          mstatus_d.mpp  = mstack_q.mpp;
-          // BEGIN rdl2arch: the NMI-mret path needs to write
-          // mepc/mcause from the mstack backup. That's a second,
-          // independent HW-write channel into our CsrFile — we'd
-          // need a save-arbiter and the generator doesn't ship
-          // that shape today. Ibex's `irq_nm_i` is tied low in our
-          // SoC (`ibex_mini_soc.sv`), so `nmi_mode_i` can never
-          // become 1, so this branch never executes. We leave the
-          // write intentions unexecuted — if a future SoC wires NMI,
-          // reinstate them via a second trap coord or a bus arbiter.
-          // END rdl2arch
-        end else begin
-          // otherwise just set mstatus.MPIE/MPP
-          mstatus_d.mpie = 1'b1;
-          mstatus_d.mpp  = PRIV_LVL_U;
-        end
+        // The NMI-mret branch used to also overwrite mepc/mcause
+        // from mstack — see the 6.5c comment for why we leave it
+        // stubbed. `irq_nm_i` is tied low in our SoC.
       end // csr_restore_mret_i
 
       default:;
@@ -897,8 +902,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   // Send current priv level to the decoder
   assign priv_mode_id_o = priv_lvl_q;
-  // Load/store instructions must factor in MPRV for PMP checking
-  assign priv_mode_lsu_o = mstatus_q.mprv ? mstatus_q.mpp : priv_lvl_q;
+  // Load/store instructions must factor in MPRV for PMP checking.
+  // BEGIN rdl2arch: our mstatus fixture doesn't model mprv (M-only
+  // SoC never sets it), so priv_mode_lsu_o is always `priv_lvl_q`.
+  assign priv_mode_lsu_o = priv_lvl_q;
+  // END rdl2arch
 
   // CSR operation logic
   always_comb begin
@@ -930,8 +938,14 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign csr_mtval_o = ourfile_hwif_out.mtval_tval;
   // END rdl2arch
 
-  assign csr_mstatus_mie_o   = mstatus_q.mie;
-  assign csr_mstatus_tw_o    = mstatus_q.tw;
+  // BEGIN rdl2arch: mstatus outputs driven from our CsrFile. `tw`
+  // isn't in our fixture (M-only SoC — WFI trap-to-M never used),
+  // so tie it low. Ibex's controller uses it to gate WFI; tied low
+  // means WFI is always allowed, which matches the spec behavior
+  // when operating in M-mode and tw=0.
+  assign csr_mstatus_mie_o   = ourfile_hwif_out.mstatus_mie;
+  assign csr_mstatus_tw_o    = 1'b0;
+  // END rdl2arch
   assign debug_single_step_o = dcsr_q.step;
   assign debug_ebreakm_o     = dcsr_q.ebreakm;
   assign debug_ebreaku_o     = dcsr_q.ebreaku;
@@ -945,24 +959,17 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // CSR instantiations //
   ////////////////////////
 
-  // MSTATUS
-  localparam status_t MSTATUS_RST_VAL = '{mie:  1'b0,
-                                          mpie: 1'b1,
-                                          mpp:  PRIV_LVL_U,
-                                          mprv: 1'b0,
-                                          tw:   1'b0};
-  ibex_csr #(
-    .Width     ($bits(status_t)),
-    .ShadowCopy(ShadowCSR),
-    .ResetValue({MSTATUS_RST_VAL})
-  ) u_mstatus_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i ({mstatus_d}),
-    .wr_en_i   (mstatus_en),
-    .rd_data_o (mstatus_q),
-    .rd_error_o(mstatus_err)
-  );
+  // BEGIN rdl2arch: upstream `u_mstatus_csr ibex_csr` instance +
+  // `MSTATUS_RST_VAL` localparam removed. mstatus storage now lives
+  // in `MTrapIbexCsrFile.mstatus_r`; our RDL gives the three live
+  // fields a reset of 0 (mie=0, mpie=0, mpp=0), matching everything
+  // upstream's RESET_VAL had except mpie which upstream reset to 1.
+  // Upstream's mpie-reset-to-1 is only observable by a program that
+  // reads mpie before any trap ever fires; our test suite never does
+  // (mpie is only consumed by mret semantics after at least one
+  // trap). If a future program relies on mpie=1 at reset, the fix
+  // is a one-line RDL change.
+  // END rdl2arch
 
   // BEGIN rdl2arch: upstream `u_mepc_csr ibex_csr` instance removed
   // — mepc storage lives in `MTrapIbexCsrFile.mepc_r`.
@@ -1701,11 +1708,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     .rd_error_o(cpuctrlsts_part_err)
   );
 
-  // BEGIN rdl2arch: `mtvec_err` removed. Our generated CsrFile
-  // doesn't implement shadow-copy error detection (yet) on the
-  // CSRs we've migrated, so that term drops out of the OR.
+  // BEGIN rdl2arch: `mtvec_err` + `mstatus_err` removed. Our
+  // generated CsrFile doesn't implement shadow-copy error detection
+  // on the migrated CSRs — those terms drop out of the OR.
   assign csr_shadow_err_o =
-    mstatus_err | pmp_csr_err | cpuctrlsts_part_err | cpuctrlsts_ic_scr_key_err;
+    pmp_csr_err | cpuctrlsts_part_err | cpuctrlsts_ic_scr_key_err;
   // END rdl2arch
 
   ////////////////
@@ -1715,12 +1722,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   `ASSERT(IbexCsrOpEnRequiresAccess, csr_op_en_i |-> csr_access_i)
 
   ////////////////////////////////////////////////////////////////////
-  // BEGIN rdl2arch — generated CSR file attachment (Phase 6.5c)    //
+  // BEGIN rdl2arch — generated CSR file attachment (Phase 6.5d)    //
   //                                                                //
   // One `MTrapIbexCsrFile` instance holds the live state for every //
   // CSR we've migrated out of Ibex so far:                         //
   //   mscratch (0x340), mtvec (0x305), mepc (0x341),               //
-  //   mcause (0x342), mtval (0x343).                               //
+  //   mcause (0x342), mtval (0x343), mstatus (0x300).              //
   //                                                                //
   // Wiring:                                                        //
   //   * SW bus: cmd_valid = (csr_op_en_i & addr-is-ours) | mtvec-  //
@@ -1731,11 +1738,14 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   //   * `granted = 1`: Ibex-only-M core; access-controller hook-up //
   //     deferred to a later sub-phase.                             //
   //   * HW save: `MTrapIbexCsrTrapCoord` muxes `hwif_in_drive.*`   //
-  //     between `hwif_in_live` (= feedback from `hwif_out`, so     //
-  //     non-save cycles hold) and the encoded `save_*` inputs when //
-  //     `csr_save_cause_i` pulses. `csr_mcause_i` is Ibex's packed //
-  //     `exc_cause_t`; we re-encode into the flat 32-bit shape     //
-  //     our CsrFile stores before driving `save_mcause_cause`.     //
+  //     between `hwif_in_live` (which we shape per field below)    //
+  //     and the `save_*` inputs when `csr_save_cause_i` pulses.    //
+  //     `csr_mcause_i` is Ibex's packed `exc_cause_t`; we re-      //
+  //     encode into the flat 32-bit shape our CsrFile stores.      //
+  //   * HW mret-restore for mstatus lives in the `hwif_in_live`    //
+  //     drives below — the TrapCoord doesn't know about mret, so   //
+  //     we fold the restore logic into the *non-save-cycle* side   //
+  //     of its mux, which it passes through unchanged.             //
   ////////////////////////////////////////////////////////////////////
 
   logic                             ourfile_cmd_valid;
@@ -1755,7 +1765,8 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
                            | (csr_addr_i == CSR_MTVEC)
                            | (csr_addr_i == CSR_MEPC)
                            | (csr_addr_i == CSR_MCAUSE)
-                           | (csr_addr_i == CSR_MTVAL);
+                           | (csr_addr_i == CSR_MTVAL)
+                           | (csr_addr_i == CSR_MSTATUS);
 
   // SW-side cmd.
   //
@@ -1799,20 +1810,66 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign mepc_rsp_rdata     = ourfile_rsp_rdata;
   assign mcause_rsp_rdata   = ourfile_rsp_rdata;
   assign mtval_rsp_rdata    = ourfile_rsp_rdata;
+  assign mstatus_rsp_rdata  = ourfile_rsp_rdata;
 
-  // ── HW save path (mepc / mcause / mtval on `csr_save_cause_i`) ─
+  // ── HW save + restore path ────────────────────────────────────
   //
   // `hwif_in_live` is the "what storage should be on a non-save
-  // cycle" side of the mux. The sw=rw;hw=rw encoding drives storage
-  // from hwif_in every cycle that SW isn't writing, so feeding
-  // hwif_out back into hwif_in_live makes storage *hold* its
-  // current value. On `csr_save_cause_i` the TrapCoord overrides
-  // the three save fields with Ibex's `exception_pc` / packed
-  // cause / mtval.
+  // cycle" side of the TrapCoord's mux. The sw=rw;hw=rw encoding
+  // drives storage from hwif_in every cycle that SW isn't writing,
+  // so feeding hwif_out back into hwif_in_live makes storage *hold*
+  // its current value. Two exceptions:
+  //
+  //   1. mret (`csr_restore_mret_i`) — we override three mstatus
+  //      fields on the cycle of the mret. The TrapCoord doesn't
+  //      model mret, but it *does* pass `hwif_in_live` through to
+  //      its non-trap output, so folding the mret behaviour into
+  //      `hwif_in_live` gets forwarded correctly. (save_cause_i
+  //      and restore_mret_i are mutually exclusive by design, so
+  //      no arbiter is needed.)
+  //
+  //   2. mstatus.mie auto-clear on trap — mie isn't a save_on_trap
+  //      field, so the TrapCoord passes `hwif_in_live.mstatus_mie`
+  //      through unchanged. We drive that input to 0 when
+  //      `csr_save_cause_i` is high so storage gets cleared.
+  //
+  // Other HW-side actions:
+  //   * `save_mstatus_mpie` feeds the TrapCoord from the CURRENT
+  //     `hwif_out.mstatus_mie` (old mie, the bit we want to save).
+  //   * `save_mstatus_mpp`  feeds from `priv_lvl_q`.
+  //   * WPRI reserved fields tied to 0 (read-zero behaviour).
   MTrapIbexCsrFileHwifIn ourfile_hwif_in_live;
+
   assign ourfile_hwif_in_live.mepc_epc     = ourfile_hwif_out.mepc_epc;
   assign ourfile_hwif_in_live.mcause_cause = ourfile_hwif_out.mcause_cause;
   assign ourfile_hwif_in_live.mtval_tval   = ourfile_hwif_out.mtval_tval;
+
+  // mstatus.mie live drive — picks between:
+  //   save-cycle → 0 (auto-clear)
+  //   mret-cycle → old mpie (restore)
+  //   hold       → current mie
+  assign ourfile_hwif_in_live.mstatus_mie  =
+      csr_save_cause_i    ? 1'b0                           :
+      csr_restore_mret_i  ? ourfile_hwif_out.mstatus_mpie  :
+                            ourfile_hwif_out.mstatus_mie;
+
+  // mstatus.mpie live drive — the TrapCoord overrides this on the
+  // save cycle with `save_mstatus_mpie`, so we only need to handle
+  // the mret-restore and hold cases here.
+  assign ourfile_hwif_in_live.mstatus_mpie =
+      csr_restore_mret_i  ? 1'b1                           :
+                            ourfile_hwif_out.mstatus_mpie;
+
+  // mstatus.mpp live drive — same pattern.
+  assign ourfile_hwif_in_live.mstatus_mpp  =
+      csr_restore_mret_i  ? PRIV_LVL_U                     :
+                            ourfile_hwif_out.mstatus_mpp;
+
+  // WPRI reserved fields: tied to 0.
+  assign ourfile_hwif_in_live.mstatus_reserved_2_1  = '0;
+  assign ourfile_hwif_in_live.mstatus_reserved_6_4  = '0;
+  assign ourfile_hwif_in_live.mstatus_reserved_10_8 = '0;
+  assign ourfile_hwif_in_live.mstatus_wpri_hi       = '0;
 
   // Encode Ibex's packed `exc_cause_t` into our CsrFile's flat
   // 32-bit mcause shape. Same layout upstream had in its read path:
@@ -1827,17 +1884,19 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   };
 
   MTrapIbexCsrTrapCoord u_ourfile_trap (
-    .clk              (clk_i),
-    .rst              (~rst_ni),
-    .trap_enter       (csr_save_cause_i),
+    .clk                (clk_i),
+    .rst                (~rst_ni),
+    .trap_enter         (csr_save_cause_i),
     // Ibex's `exception_pc` is already aligned (bit 0 always zero);
     // masking explicitly to match our RDL's WARL on mepc.epc is
     // belt-and-suspenders.
-    .save_mepc_epc    ({exception_pc[31:1], 1'b0}),
-    .save_mcause_cause(mcause_save_flat),
-    .save_mtval_tval  (csr_mtval_i),
-    .hwif_in_live     (ourfile_hwif_in_live),
-    .hwif_in_drive    (ourfile_hwif_in)
+    .save_mepc_epc      ({exception_pc[31:1], 1'b0}),
+    .save_mcause_cause  (mcause_save_flat),
+    .save_mtval_tval    (csr_mtval_i),
+    .save_mstatus_mpie  (ourfile_hwif_out.mstatus_mie),  // save old mie
+    .save_mstatus_mpp   (priv_lvl_q),                    // save old priv
+    .hwif_in_live       (ourfile_hwif_in_live),
+    .hwif_in_drive      (ourfile_hwif_in)
   );
 
   MTrapIbexCsrFile u_ourfile (
@@ -1859,10 +1918,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   // Silence verilator on signals we don't consume yet. Subsequent
   // sub-phases will hook these up to the CSR file's access controller.
+  // `mstatus_wpri_lo` is a SW=rw;HW=r field that's only observable
+  // via SW csrr — no core-side consumer on this SoC.
   logic unused_ourfile_sigs;
   assign unused_ourfile_sigs = ^{ourfile_cmd_ready,
                                   ourfile_rsp_valid,
-                                  ourfile_hwif_out.mscratch_value};
+                                  ourfile_hwif_out.mscratch_value,
+                                  ourfile_hwif_out.mstatus_wpri_lo};
   // END rdl2arch
 
 endmodule

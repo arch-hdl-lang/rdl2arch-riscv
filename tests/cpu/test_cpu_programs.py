@@ -60,6 +60,10 @@ PROGRAMS: list[CpuProgram] = [
         name="mepc_mcause_mtval_csrfile",
         cocotb_module="test_mepc_mcause_mtval_csrfile",
     ),
+    CpuProgram(
+        name="mstatus_csrfile",
+        cocotb_module="test_mstatus_csrfile",
+    ),
 ]
 
 

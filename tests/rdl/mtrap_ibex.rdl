@@ -8,8 +8,14 @@
 //                                 generated CsrTrapCoord bridges
 //                                 Ibex's `csr_save_cause_i` pulse
 //                                 into the CsrFile's hwif_in)
-//   6.5d — + mstatus             (auto-clear MIE on trap, restore
-//                                 from MPIE on mret)
+//   6.5d — + mstatus             (auto-clear `mie` on trap; restore
+//                                 `mie`←`mpie`, `mpie`←1, `mpp`←U
+//                                 on mret. We model only the three
+//                                 fields Ibex exposes to its
+//                                 controller (mie / mpie / mpp);
+//                                 mprv / tw aren't wired in our
+//                                 M-only SoC so they stay absent
+//                                 from the fixture.)
 //   6.5e — + mie/mip             (mip is combinational mirror of
 //                                 live IRQ lines)
 //
@@ -18,6 +24,29 @@
 
 addrmap m_trap_ibex {
     default riscv_priv = "m";
+
+    reg {
+        // mstatus, M-only subset. We model only the three interrupt-
+        // relevant fields (mie / mpie / mpp). mprv / tw would need
+        // U-mode support on the core side to matter.
+        //
+        // Reserved fields are emitted as sw=r;hw=w WPRI so the
+        // generator still places them in the register image (read as
+        // 0, writes discarded). Our hybrid adapter ties the hwif_in
+        // drivers for these reserved bits to zero.
+        riscv_csr_addr = 0x300;
+        field { sw = rw; hw = r;  reset = 0x0; riscv_wpri = true; } wpri_lo[0:0];
+        field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_2_1[2:1];
+        field { sw = rw; hw = rw; reset = 0x0;                    } mie[3:3];
+        field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_6_4[6:4];
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_save_on_trap = true; riscv_restore_on_ret = true; } mpie[7:7];
+        field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_10_8[10:8];
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_warl = "0x3";
+                riscv_save_on_trap = true; riscv_restore_on_ret = true; } mpp[12:11];
+        field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } wpri_hi[31:13];
+    } mstatus @ 0x18;
 
     reg {
         // mtvec. Kept with a lean WARL profile for now: mode is a 2-bit

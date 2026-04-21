@@ -5,7 +5,8 @@ package MTrapIbexCsrFilePkg
     Mepc,
     Mcause,
     Mtval,
-    Mscratch
+    Mscratch,
+    Mstatus
   end enum MTrapIbexCsrFileAddr
 
   struct MtvecReg
@@ -29,10 +30,28 @@ package MTrapIbexCsrFilePkg
     value: UInt<32>;
   end struct MscratchReg
 
+  struct MstatusReg
+    wpri_lo: UInt<1>;
+    reserved_2_1: UInt<2>;
+    mie: UInt<1>;
+    reserved_6_4: UInt<3>;
+    mpie: UInt<1>;
+    reserved_10_8: UInt<3>;
+    mpp: UInt<2>;
+    wpri_hi: UInt<19>;
+  end struct MstatusReg
+
   struct MTrapIbexCsrFileHwifIn
     mepc_epc: UInt<32>;
     mcause_cause: UInt<32>;
     mtval_tval: UInt<32>;
+    mstatus_reserved_2_1: UInt<2>;
+    mstatus_mie: UInt<1>;
+    mstatus_reserved_6_4: UInt<3>;
+    mstatus_mpie: UInt<1>;
+    mstatus_reserved_10_8: UInt<3>;
+    mstatus_mpp: UInt<2>;
+    mstatus_wpri_hi: UInt<19>;
   end struct MTrapIbexCsrFileHwifIn
 
   struct MTrapIbexCsrFileHwifOut
@@ -42,6 +61,10 @@ package MTrapIbexCsrFilePkg
     mcause_cause: UInt<32>;
     mtval_tval: UInt<32>;
     mscratch_value: UInt<32>;
+    mstatus_wpri_lo: UInt<1>;
+    mstatus_mie: UInt<1>;
+    mstatus_mpie: UInt<1>;
+    mstatus_mpp: UInt<2>;
   end struct MTrapIbexCsrFileHwifOut
 
   bus MTrapIbexCsrFileBus
