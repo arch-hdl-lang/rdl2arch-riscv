@@ -1,13 +1,16 @@
-# Build rules for the Phase-6.2 timer-ISR test program.
+# Build rules for the CPU bring-up programs (Phases 6.2 / 6.3).
 #
-# Outputs, by default into $(BUILD):
-#   timer_isr.elf   — linked ELF
-#   timer_isr.bin   — flat binary (stripped of ELF metadata)
-#   timer_isr.vmem  — one 32-bit word per line, ready for $readmemh
-#   timer_isr.dis   — disassembly, for debugging when things go sideways
+# Default target builds every program named in $(PROGS) into $(BUILD),
+# producing:
+#   <prog>.elf   — linked ELF
+#   <prog>.bin   — flat binary (stripped of ELF metadata)
+#   <prog>.vmem  — one 32-bit word per line, ready for $readmemh
+#   <prog>.dis   — disassembly, for debugging when things go sideways
 #
 # Invoked from the pytest harness as:
 #   make -C tests/cpu/sw BUILD=<tmp>
+# Or for a single program:
+#   make -C tests/cpu/sw BUILD=<tmp> <tmp>/<prog>.vmem
 
 CROSS     ?= riscv64-elf-
 AS        := $(CROSS)gcc
@@ -15,44 +18,43 @@ LD        := $(CROSS)gcc
 OBJCOPY   := $(CROSS)objcopy
 OBJDUMP   := $(CROSS)objdump
 
-# RV32IMC with Zicsr so csrr/csrw assemble. We drop the C extension to
-# keep disassembly readable — RV32IM-only — but any of `rv32i`, `rv32im`,
-# `rv32imc` works with our SoC config (Ibex defaults enable the C ext).
+# RV32IM with Zicsr so csrr/csrw assemble. No compressed extension for
+# readable disassembly; any of `rv32i`, `rv32im`, `rv32imc` works with
+# our SoC config.
 MARCH     := rv32im_zicsr
 MABI      := ilp32
 CFLAGS    := -march=$(MARCH) -mabi=$(MABI) -nostdlib -nostartfiles \
              -ffreestanding -Os -g \
              -Wl,-T,link.ld -Wl,--no-relax
-ASFLAGS   := -march=$(MARCH) -mabi=$(MABI) -c
+ASFLAGS   := -march=$(MARCH) -mabi=$(MABI) -c -I.
 
 BUILD     ?= build
 
-ELF       := $(BUILD)/timer_isr.elf
-BIN       := $(BUILD)/timer_isr.bin
-VMEM      := $(BUILD)/timer_isr.vmem
-DIS       := $(BUILD)/timer_isr.dis
+PROGS     := timer_isr sw_isr ext_isr
 
-OBJS      := $(BUILD)/timer_isr.o
+VMEMS     := $(PROGS:%=$(BUILD)/%.vmem)
+DISES     := $(PROGS:%=$(BUILD)/%.dis)
 
 .PHONY: all clean
-all: $(VMEM) $(DIS)
+all: $(VMEMS) $(DISES)
 
 $(BUILD):
 	mkdir -p $(BUILD)
 
-$(BUILD)/%.o: %.S | $(BUILD)
+# `.S` (uppercase) → GCC runs cpp first, so #includes work.
+$(BUILD)/%.o: %.S common.h vector_table.inc | $(BUILD)
 	$(AS) $(ASFLAGS) -o $@ $<
 
-$(ELF): $(OBJS) link.ld | $(BUILD)
-	$(LD) $(CFLAGS) -o $@ $(OBJS)
+$(BUILD)/%.elf: $(BUILD)/%.o link.ld | $(BUILD)
+	$(LD) $(CFLAGS) -o $@ $<
 
-$(BIN): $(ELF)
+$(BUILD)/%.bin: $(BUILD)/%.elf
 	$(OBJCOPY) -O binary $< $@
 
-$(VMEM): $(BIN) bin2vmem.py
+$(BUILD)/%.vmem: $(BUILD)/%.bin bin2vmem.py
 	python3 bin2vmem.py $< $@
 
-$(DIS): $(ELF)
+$(BUILD)/%.dis: $(BUILD)/%.elf
 	$(OBJDUMP) -d -M no-aliases $< > $@
 
 clean:
