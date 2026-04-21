@@ -23,5 +23,18 @@ module MTrapCsrsCsrTrapCoord
     hwif_in_drive.mepc_epc = trap_enter ? save_mepc_epc : hwif_in_live.mepc_epc;
     hwif_in_drive.mcause_cause = trap_enter ? save_mcause_cause : hwif_in_live.mcause_cause;
     hwif_in_drive.mtval_tval = trap_enter ? save_mtval_tval : hwif_in_live.mtval_tval;
+    hwif_in_drive.mie_wpri_0_0 = hwif_in_live.mie_wpri_0_0;
+    hwif_in_drive.mie_wpri_2_1 = hwif_in_live.mie_wpri_2_1;
+    hwif_in_drive.mie_wpri_6_4 = hwif_in_live.mie_wpri_6_4;
+    hwif_in_drive.mie_wpri_10_8 = hwif_in_live.mie_wpri_10_8;
+    hwif_in_drive.mie_wpri_hi = hwif_in_live.mie_wpri_hi;
+    hwif_in_drive.mip_wpri_0_0 = hwif_in_live.mip_wpri_0_0;
+    hwif_in_drive.mip_wpri_2_1 = hwif_in_live.mip_wpri_2_1;
+    hwif_in_drive.mip_msip = hwif_in_live.mip_msip;
+    hwif_in_drive.mip_wpri_6_4 = hwif_in_live.mip_wpri_6_4;
+    hwif_in_drive.mip_mtip = hwif_in_live.mip_mtip;
+    hwif_in_drive.mip_wpri_10_8 = hwif_in_live.mip_wpri_10_8;
+    hwif_in_drive.mip_meip = hwif_in_live.mip_meip;
+    hwif_in_drive.mip_wpri_hi = hwif_in_live.mip_wpri_hi;
   end comb
 end module MTrapCsrsCsrTrapCoord
