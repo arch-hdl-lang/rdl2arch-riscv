@@ -332,9 +332,11 @@ def test_plic_scan_buckets_regs_by_role(tmp_path) -> None:
     top = _compile_rdl(tmp_path, _PLIC_SRC)
     m = scan_plic(top, module_name="P", package_name="PPkg")
     assert m.pending is not None
-    assert m.enable is not None
-    assert m.threshold is not None
-    assert m.claim is not None
+    # Single-context fixture → one enable/threshold/claim each.
+    assert len(m.enables) == 1
+    assert len(m.thresholds) == 1
+    assert len(m.claims) == 1
+    assert m.n_contexts == 1
     # priority[5] gives us 5 priority regs; n_sources = 4 (sources 1..4;
     # source 0 is reserved).
     assert len(m.priorities) == 5
@@ -346,19 +348,20 @@ def test_plic_emit_has_arbiter_structure(tmp_path) -> None:
     top = _compile_rdl(tmp_path, _PLIC_SRC)
     m = scan_plic(top, module_name="P", package_name="PPkg")
     src = emit_plic_logic(m, "PLogic")
-    # Per-source candidate flags for sources 1..4
+    # Per-source candidate flags for sources 1..4 in context 0
     for i in range(1, 5):
-        assert f"let cand_{i}: Bool" in src, f"missing cand_{i}:\n{src}"
+        assert f"let c0_cand_{i}: Bool" in src, f"missing c0_cand_{i}:\n{src}"
         assert f"hwif_out.priority_{i}_value" in src, (
             f"missing priority_{i} indexed ref:\n{src}"
         )
-    # Cascade chain
-    assert "let w1_id:" in src
-    assert "let w4_id:" in src
+    # Cascade chain for context 0
+    assert "let c0_w1_id:" in src
+    assert "let c0_w4_id:" in src
     # Outputs
     assert "hwif_in.pending_value = source_in;" in src
-    assert "hwif_in.claim_0_value = w4_id;" in src
-    assert "meip_out = w4_id != 3'h0;" in src  # 4 sources → 3-bit ID
+    assert "hwif_in.claim_0_value = c0_w4_id;" in src
+    # 4 sources → 3-bit ID; single-context fixture → scalar bool-to-UInt<1>.
+    assert "intr_out = c0_w4_id != 3'h0;" in src
 
 
 def test_plic_emit_rejects_missing_regs(tmp_path) -> None:

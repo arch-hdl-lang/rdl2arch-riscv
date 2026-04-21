@@ -6,44 +6,44 @@ module PlicLogic
   port source_in: in UInt<9>;
   port hwif_out:  in  PlicHwifOut;
   port hwif_in:   out PlicHwifIn;
-  port meip_out:  out Bool;
+  port intr_out:  out UInt<1>;
 
-  let cand_1: Bool = source_in[1] and hwif_out.enable_0_value[1] and (hwif_out.priority_1_value > hwif_out.threshold_0_value);
-  let cand_2: Bool = source_in[2] and hwif_out.enable_0_value[2] and (hwif_out.priority_2_value > hwif_out.threshold_0_value);
-  let cand_3: Bool = source_in[3] and hwif_out.enable_0_value[3] and (hwif_out.priority_3_value > hwif_out.threshold_0_value);
-  let cand_4: Bool = source_in[4] and hwif_out.enable_0_value[4] and (hwif_out.priority_4_value > hwif_out.threshold_0_value);
-  let cand_5: Bool = source_in[5] and hwif_out.enable_0_value[5] and (hwif_out.priority_5_value > hwif_out.threshold_0_value);
-  let cand_6: Bool = source_in[6] and hwif_out.enable_0_value[6] and (hwif_out.priority_6_value > hwif_out.threshold_0_value);
-  let cand_7: Bool = source_in[7] and hwif_out.enable_0_value[7] and (hwif_out.priority_7_value > hwif_out.threshold_0_value);
-  let cand_8: Bool = source_in[8] and hwif_out.enable_0_value[8] and (hwif_out.priority_8_value > hwif_out.threshold_0_value);
-
-  let w1_id:   UInt<4> = cand_1 ? 4'h1 : 4'h0;
-  let w1_prio: UInt<3> = cand_1 ? hwif_out.priority_1_value : 3'h0;
-  let w2_take: Bool = cand_2 and (w1_id == 4'h0 or hwif_out.priority_2_value > w1_prio);
-  let w2_id:   UInt<4> = w2_take ? 4'h2 : w1_id;
-  let w2_prio: UInt<3> = w2_take ? hwif_out.priority_2_value : w1_prio;
-  let w3_take: Bool = cand_3 and (w2_id == 4'h0 or hwif_out.priority_3_value > w2_prio);
-  let w3_id:   UInt<4> = w3_take ? 4'h3 : w2_id;
-  let w3_prio: UInt<3> = w3_take ? hwif_out.priority_3_value : w2_prio;
-  let w4_take: Bool = cand_4 and (w3_id == 4'h0 or hwif_out.priority_4_value > w3_prio);
-  let w4_id:   UInt<4> = w4_take ? 4'h4 : w3_id;
-  let w4_prio: UInt<3> = w4_take ? hwif_out.priority_4_value : w3_prio;
-  let w5_take: Bool = cand_5 and (w4_id == 4'h0 or hwif_out.priority_5_value > w4_prio);
-  let w5_id:   UInt<4> = w5_take ? 4'h5 : w4_id;
-  let w5_prio: UInt<3> = w5_take ? hwif_out.priority_5_value : w4_prio;
-  let w6_take: Bool = cand_6 and (w5_id == 4'h0 or hwif_out.priority_6_value > w5_prio);
-  let w6_id:   UInt<4> = w6_take ? 4'h6 : w5_id;
-  let w6_prio: UInt<3> = w6_take ? hwif_out.priority_6_value : w5_prio;
-  let w7_take: Bool = cand_7 and (w6_id == 4'h0 or hwif_out.priority_7_value > w6_prio);
-  let w7_id:   UInt<4> = w7_take ? 4'h7 : w6_id;
-  let w7_prio: UInt<3> = w7_take ? hwif_out.priority_7_value : w6_prio;
-  let w8_take: Bool = cand_8 and (w7_id == 4'h0 or hwif_out.priority_8_value > w7_prio);
-  let w8_id:   UInt<4> = w8_take ? 4'h8 : w7_id;
-  let w8_prio: UInt<3> = w8_take ? hwif_out.priority_8_value : w7_prio;
+  // ── context 0 ──
+  let c0_cand_1: Bool = source_in[1] and hwif_out.enable_0_value[1] and (hwif_out.priority_1_value > hwif_out.threshold_0_value);
+  let c0_cand_2: Bool = source_in[2] and hwif_out.enable_0_value[2] and (hwif_out.priority_2_value > hwif_out.threshold_0_value);
+  let c0_cand_3: Bool = source_in[3] and hwif_out.enable_0_value[3] and (hwif_out.priority_3_value > hwif_out.threshold_0_value);
+  let c0_cand_4: Bool = source_in[4] and hwif_out.enable_0_value[4] and (hwif_out.priority_4_value > hwif_out.threshold_0_value);
+  let c0_cand_5: Bool = source_in[5] and hwif_out.enable_0_value[5] and (hwif_out.priority_5_value > hwif_out.threshold_0_value);
+  let c0_cand_6: Bool = source_in[6] and hwif_out.enable_0_value[6] and (hwif_out.priority_6_value > hwif_out.threshold_0_value);
+  let c0_cand_7: Bool = source_in[7] and hwif_out.enable_0_value[7] and (hwif_out.priority_7_value > hwif_out.threshold_0_value);
+  let c0_cand_8: Bool = source_in[8] and hwif_out.enable_0_value[8] and (hwif_out.priority_8_value > hwif_out.threshold_0_value);
+  let c0_w1_id:   UInt<4> = c0_cand_1 ? 4'h1 : 4'h0;
+  let c0_w1_prio: UInt<3> = c0_cand_1 ? hwif_out.priority_1_value : 3'h0;
+  let c0_w2_take: Bool = c0_cand_2 and (c0_w1_id == 4'h0 or hwif_out.priority_2_value > c0_w1_prio);
+  let c0_w2_id:   UInt<4> = c0_w2_take ? 4'h2 : c0_w1_id;
+  let c0_w2_prio: UInt<3> = c0_w2_take ? hwif_out.priority_2_value : c0_w1_prio;
+  let c0_w3_take: Bool = c0_cand_3 and (c0_w2_id == 4'h0 or hwif_out.priority_3_value > c0_w2_prio);
+  let c0_w3_id:   UInt<4> = c0_w3_take ? 4'h3 : c0_w2_id;
+  let c0_w3_prio: UInt<3> = c0_w3_take ? hwif_out.priority_3_value : c0_w2_prio;
+  let c0_w4_take: Bool = c0_cand_4 and (c0_w3_id == 4'h0 or hwif_out.priority_4_value > c0_w3_prio);
+  let c0_w4_id:   UInt<4> = c0_w4_take ? 4'h4 : c0_w3_id;
+  let c0_w4_prio: UInt<3> = c0_w4_take ? hwif_out.priority_4_value : c0_w3_prio;
+  let c0_w5_take: Bool = c0_cand_5 and (c0_w4_id == 4'h0 or hwif_out.priority_5_value > c0_w4_prio);
+  let c0_w5_id:   UInt<4> = c0_w5_take ? 4'h5 : c0_w4_id;
+  let c0_w5_prio: UInt<3> = c0_w5_take ? hwif_out.priority_5_value : c0_w4_prio;
+  let c0_w6_take: Bool = c0_cand_6 and (c0_w5_id == 4'h0 or hwif_out.priority_6_value > c0_w5_prio);
+  let c0_w6_id:   UInt<4> = c0_w6_take ? 4'h6 : c0_w5_id;
+  let c0_w6_prio: UInt<3> = c0_w6_take ? hwif_out.priority_6_value : c0_w5_prio;
+  let c0_w7_take: Bool = c0_cand_7 and (c0_w6_id == 4'h0 or hwif_out.priority_7_value > c0_w6_prio);
+  let c0_w7_id:   UInt<4> = c0_w7_take ? 4'h7 : c0_w6_id;
+  let c0_w7_prio: UInt<3> = c0_w7_take ? hwif_out.priority_7_value : c0_w6_prio;
+  let c0_w8_take: Bool = c0_cand_8 and (c0_w7_id == 4'h0 or hwif_out.priority_8_value > c0_w7_prio);
+  let c0_w8_id:   UInt<4> = c0_w8_take ? 4'h8 : c0_w7_id;
+  let c0_w8_prio: UInt<3> = c0_w8_take ? hwif_out.priority_8_value : c0_w7_prio;
 
   comb
     hwif_in.pending_value = source_in;
-    hwif_in.claim_0_value = w8_id;
-    meip_out = w8_id != 4'h0;
+    hwif_in.claim_0_value = c0_w8_id;
+    intr_out = c0_w8_id != 4'h0;
   end comb
 end module PlicLogic

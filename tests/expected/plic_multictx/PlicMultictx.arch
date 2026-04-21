@@ -1,0 +1,162 @@
+use PlicMultictxPkg;
+
+bus AxiLite
+  param ADDR_W: const = 22;
+  param DATA_W: const = 32;
+
+  aw_valid: out Bool;
+  aw_ready: in  Bool;
+  aw_addr:  out UInt<ADDR_W>;
+  aw_prot:  out UInt<3>;
+
+  w_valid:  out Bool;
+  w_ready:  in  Bool;
+  w_data:   out UInt<DATA_W>;
+  w_strb:   out UInt<4>;
+
+  b_valid:  in  Bool;
+  b_ready:  out Bool;
+  b_resp:   in  UInt<2>;
+
+  ar_valid: out Bool;
+  ar_ready: in  Bool;
+  ar_addr:  out UInt<ADDR_W>;
+  ar_prot:  out UInt<3>;
+
+  r_valid:  in  Bool;
+  r_ready:  out Bool;
+  r_data:   in  UInt<DATA_W>;
+  r_resp:   in  UInt<2>;
+end bus AxiLite
+
+module PlicMultictx
+  port clk:      in Clock<SysDomain>;
+  port rst:      in Reset<Sync>;
+  port s_axi: target AxiLite<ADDR_W=22, DATA_W=32>;
+  port hwif_in:  in PlicMultictxHwifIn;
+  port hwif_out: out PlicMultictxHwifOut;
+
+  default seq on clk rising;
+
+  reg priority_r: Vec<PriorityReg, 9> reset rst => PriorityReg { value: 0, reserved: 0 };
+  reg pending_r: PendingReg reset rst => PendingReg { value: 0, reserved: 0 };
+  reg enable_0_r: Enable0Reg reset rst => Enable0Reg { value: 0, reserved: 0 };
+  reg enable_1_r: Enable1Reg reset rst => Enable1Reg { value: 0, reserved: 0 };
+  reg threshold_0_r: Threshold0Reg reset rst => Threshold0Reg { value: 0, reserved: 0 };
+  reg claim_0_r: Claim0Reg reset rst => Claim0Reg { value: 0, reserved: 0 };
+  reg threshold_1_r: Threshold1Reg reset rst => Threshold1Reg { value: 0, reserved: 0 };
+  reg claim_1_r: Claim1Reg reset rst => Claim1Reg { value: 0, reserved: 0 };
+
+  reg bresp_valid_r: Bool reset rst => false;
+  reg rresp_valid_r: Bool reset rst => false;
+  reg rdata_r:       UInt<32> reset rst => 0;
+
+  let wr_fire: Bool = s_axi.aw_valid and s_axi.w_valid and not bresp_valid_r;
+  let rd_fire: Bool = s_axi.ar_valid and not rresp_valid_r;
+
+  let rdata_mux: UInt<32> = match s_axi.ar_addr
+    22'h0 => {priority_r[0].reserved, priority_r[0].value},
+    22'h4 => {priority_r[1].reserved, priority_r[1].value},
+    22'h8 => {priority_r[2].reserved, priority_r[2].value},
+    22'hc => {priority_r[3].reserved, priority_r[3].value},
+    22'h10 => {priority_r[4].reserved, priority_r[4].value},
+    22'h14 => {priority_r[5].reserved, priority_r[5].value},
+    22'h18 => {priority_r[6].reserved, priority_r[6].value},
+    22'h1c => {priority_r[7].reserved, priority_r[7].value},
+    22'h20 => {priority_r[8].reserved, priority_r[8].value},
+    22'h1000 => {pending_r.reserved, pending_r.value},
+    22'h2000 => {enable_0_r.reserved, enable_0_r.value},
+    22'h2080 => {enable_1_r.reserved, enable_1_r.value},
+    22'h200000 => {threshold_0_r.reserved, threshold_0_r.value},
+    22'h200004 => {claim_0_r.reserved, claim_0_r.value},
+    22'h201000 => {threshold_1_r.reserved, threshold_1_r.value},
+    22'h201004 => {claim_1_r.reserved, claim_1_r.value},
+    _ => 0
+  end match;
+
+  seq
+    if bresp_valid_r and s_axi.b_ready
+      bresp_valid_r <= false;
+    end if
+    if wr_fire
+      bresp_valid_r <= true;
+    end if
+    if rresp_valid_r and s_axi.r_ready
+      rresp_valid_r <= false;
+    end if
+    if rd_fire
+      rresp_valid_r <= true;
+    end if
+    pending_r.value <= hwif_in.pending_value;
+    claim_0_r.value <= hwif_in.claim_0_value;
+    claim_1_r.value <= hwif_in.claim_1_value;
+    if wr_fire
+      if s_axi.aw_addr == 22'h2000
+        enable_0_r.value <= s_axi.w_data[8:0];
+      end if
+      if s_axi.aw_addr == 22'h2080
+        enable_1_r.value <= s_axi.w_data[8:0];
+      end if
+      if s_axi.aw_addr == 22'h200000
+        threshold_0_r.value <= s_axi.w_data[2:0];
+      end if
+      if s_axi.aw_addr == 22'h201000
+        threshold_1_r.value <= s_axi.w_data[2:0];
+      end if
+    end if
+    if rd_fire
+      rdata_r <= rdata_mux;
+    end if
+  end seq
+
+  generate_for i in 0..8
+    seq
+      if wr_fire and s_axi.aw_addr == 22'h0 + i * 4
+        priority_r[i].value <= s_axi.w_data[2:0];
+      end if
+    end seq
+  end generate_for
+
+  comb
+    s_axi.aw_ready = not bresp_valid_r;
+    s_axi.w_ready  = not bresp_valid_r;
+    s_axi.b_valid  = bresp_valid_r;
+    s_axi.b_resp   = 0;
+
+    s_axi.ar_ready = not rresp_valid_r;
+    s_axi.r_valid  = rresp_valid_r;
+    s_axi.r_data   = rdata_r;
+    s_axi.r_resp   = 0;
+
+    hwif_out.priority_0_value = priority_r[0].value;
+    hwif_out.priority_0_reserved = priority_r[0].reserved;
+    hwif_out.priority_1_value = priority_r[1].value;
+    hwif_out.priority_1_reserved = priority_r[1].reserved;
+    hwif_out.priority_2_value = priority_r[2].value;
+    hwif_out.priority_2_reserved = priority_r[2].reserved;
+    hwif_out.priority_3_value = priority_r[3].value;
+    hwif_out.priority_3_reserved = priority_r[3].reserved;
+    hwif_out.priority_4_value = priority_r[4].value;
+    hwif_out.priority_4_reserved = priority_r[4].reserved;
+    hwif_out.priority_5_value = priority_r[5].value;
+    hwif_out.priority_5_reserved = priority_r[5].reserved;
+    hwif_out.priority_6_value = priority_r[6].value;
+    hwif_out.priority_6_reserved = priority_r[6].reserved;
+    hwif_out.priority_7_value = priority_r[7].value;
+    hwif_out.priority_7_reserved = priority_r[7].reserved;
+    hwif_out.priority_8_value = priority_r[8].value;
+    hwif_out.priority_8_reserved = priority_r[8].reserved;
+    hwif_out.pending_reserved = pending_r.reserved;
+    hwif_out.enable_0_value = enable_0_r.value;
+    hwif_out.enable_0_reserved = enable_0_r.reserved;
+    hwif_out.enable_1_value = enable_1_r.value;
+    hwif_out.enable_1_reserved = enable_1_r.reserved;
+    hwif_out.threshold_0_value = threshold_0_r.value;
+    hwif_out.threshold_0_reserved = threshold_0_r.reserved;
+    hwif_out.claim_0_reserved = claim_0_r.reserved;
+    hwif_out.threshold_1_value = threshold_1_r.value;
+    hwif_out.threshold_1_reserved = threshold_1_r.reserved;
+    hwif_out.claim_1_reserved = claim_1_r.reserved;
+  end comb
+
+end module PlicMultictx

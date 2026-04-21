@@ -16,7 +16,8 @@ later phase).
 - ✅ Phase 5 — Interrupt controllers.
   - ✅ Phase 5.0 — `mip` / `mie` CSRs in the mtrap fixture.
   - ✅ Phase 5.1 — CLINT generator (`RiscvClintExporter` emits the MMIO register block + timer/msip logic module). Single-hart; multi-hart is a follow-up.
-  - ✅ Phase 5.2 — PLIC generator (`RiscvPlicExporter` emits the MMIO register block + priority-arbitration logic module). 8-source, single M-mode context, level-triggered, read-only claim. Multi-context, edge detection, and full claim/complete handshake are follow-ups.
+  - ✅ Phase 5.2 — PLIC generator (`RiscvPlicExporter` emits the MMIO register block + priority-arbitration logic module). Level-triggered, read-only claim.
+  - ✅ Phase 5.2a — Multi-context PLIC. Arbiter replicates per context; output is a `UInt<N_contexts>` bitmap. Fixtures shipped: `plic_basic` (1 context), `plic_multictx` (2 contexts: M + S).
 
 ## Install
 

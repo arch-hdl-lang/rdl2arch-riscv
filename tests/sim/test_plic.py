@@ -49,7 +49,12 @@ def plic_so(arch_bin, tmp_path_factory) -> str:
 
 def _drive(dut, *, sources: int, priorities: dict[int, int],
            enables: dict[int, bool], threshold: int) -> tuple[int, int]:
-    """Set PLIC state, evaluate, return (winner_id, meip_out)."""
+    """Set PLIC state, evaluate, return (winner_id, intr_out_bit0).
+
+    `intr_out` is a UInt<N_contexts> bitmap; bit 0 is context 0 (M-mode)
+    — the one this fixture declares. For multi-context tests see
+    `test_plic_multictx.py`.
+    """
     dut.source_in = sources
     for i in range(9):
         setattr(dut.hwif_out, f"priority_{i}_value", priorities.get(i, 0))
@@ -58,7 +63,7 @@ def _drive(dut, *, sources: int, priorities: dict[int, int],
     )
     dut.hwif_out.threshold_0_value = threshold
     dut.eval_comb()
-    return int(dut.hwif_in.claim_0_value), int(dut.meip_out)
+    return int(dut.hwif_in.claim_0_value), int(dut.intr_out) & 1
 
 
 def test_plic_no_source_gives_no_winner(plic_so) -> None:
