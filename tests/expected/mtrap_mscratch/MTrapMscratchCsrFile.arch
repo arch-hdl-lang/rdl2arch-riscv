@@ -1,0 +1,43 @@
+use MTrapMscratchCsrFilePkg;
+
+module MTrapMscratchCsrFile
+  port clk: in Clock<SysDomain>;
+  port rst: in Reset<Sync>;
+  port csr: target MTrapMscratchCsrFileBus;
+  port granted: in Bool;
+  port hwif_in:  in MTrapMscratchCsrFileHwifIn;
+  port hwif_out: out MTrapMscratchCsrFileHwifOut;
+
+  default seq on clk rising;
+
+  reg mscratch_r: MscratchReg reset rst => MscratchReg { value: 0 };
+
+
+  let csr_rdata_mux: UInt<32> = match csr.cmd_addr
+    12'h340 => mscratch_r.value,
+    _ => 0
+  end match;
+
+  seq
+    if csr.cmd_valid
+      if granted and (csr.cmd_op != 2'b00)
+        if csr.cmd_addr == 12'h340
+          mscratch_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mscratch_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mscratch_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mscratch_r.value
+            end match;
+        end if
+      end if
+    end if
+  end seq
+
+  comb
+    csr.cmd_ready = true;
+    csr.rsp_valid = csr.cmd_valid;
+    csr.rsp_rdata = csr.cmd_valid ? csr_rdata_mux : 0;
+    hwif_out.mscratch_value = mscratch_r.value;
+  end comb
+
+end module MTrapMscratchCsrFile

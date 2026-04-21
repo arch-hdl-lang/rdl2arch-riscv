@@ -1,0 +1,13 @@
+use MTrapMscratchCsrFilePkg;
+
+module MTrapMscratchCsrTrapCoord
+  port clk: in Clock<SysDomain>;
+  port rst: in Reset<Sync>;
+  port trap_enter: in Bool;
+  port hwif_in_live:  in  MTrapMscratchCsrFileHwifIn;
+  port hwif_in_drive: out MTrapMscratchCsrFileHwifIn;
+
+  comb
+    hwif_in_drive._reserved = hwif_in_live._reserved;
+  end comb
+end module MTrapMscratchCsrTrapCoord

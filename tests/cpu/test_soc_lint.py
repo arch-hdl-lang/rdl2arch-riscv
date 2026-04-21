@@ -35,6 +35,7 @@ def test_ibex_mini_soc_lints(
         "-Wno-PINMISSING",     # we don't connect every tracing port
         "-Wno-WIDTHEXPAND",    # $readmemh vs. sized vectors — benign
         "-Wno-IMPORTSTAR",     # arch-com emits `import Pkg::*;` at $unit
+        "-Wno-DECLFILENAME",   # our in-tree Ibex forks keep upstream module names
         "--unroll-count", "72",  # required by prim_secded per Verilator#1266
         "-f", str(vc_path),
         "--top-module", "ibex_mini_soc",

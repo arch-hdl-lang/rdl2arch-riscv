@@ -1,0 +1,31 @@
+package MTrapMscratchCsrFilePkg
+
+  enum MTrapMscratchCsrFileAddr
+    Mscratch
+  end enum MTrapMscratchCsrFileAddr
+
+  struct MscratchReg
+    value: UInt<32>;
+  end struct MscratchReg
+
+  struct MTrapMscratchCsrFileHwifIn
+    _reserved: UInt<1>;
+  end struct MTrapMscratchCsrFileHwifIn
+
+  struct MTrapMscratchCsrFileHwifOut
+    mscratch_value: UInt<32>;
+  end struct MTrapMscratchCsrFileHwifOut
+
+  bus MTrapMscratchCsrFileBus
+    handshake cmd: send kind: valid_ready
+      addr:  UInt<12>;
+      op:    UInt<2>;
+      wdata: UInt<32>;
+    end handshake cmd
+
+    handshake rsp: receive kind: valid_only
+      rdata: UInt<32>;
+    end handshake rsp
+  end bus MTrapMscratchCsrFileBus
+
+end package MTrapMscratchCsrFilePkg
