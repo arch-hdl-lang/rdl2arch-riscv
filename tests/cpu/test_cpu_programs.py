@@ -50,10 +50,11 @@ class CpuProgram:
     cocotb_module: str       # matches the `test_*.py` under cocotb_tests/
 
 PROGRAMS: list[CpuProgram] = [
-    CpuProgram(name="timer_isr",    cocotb_module="test_timer_isr"),
-    CpuProgram(name="sw_isr",       cocotb_module="test_sw_isr"),
-    CpuProgram(name="ext_isr",      cocotb_module="test_ext_isr"),
-    CpuProgram(name="multictx_isr", cocotb_module="test_multictx_isr"),
+    CpuProgram(name="timer_isr",        cocotb_module="test_timer_isr"),
+    CpuProgram(name="sw_isr",           cocotb_module="test_sw_isr"),
+    CpuProgram(name="ext_isr",          cocotb_module="test_ext_isr"),
+    CpuProgram(name="multictx_isr",     cocotb_module="test_multictx_isr"),
+    CpuProgram(name="mscratch_csrfile", cocotb_module="test_mscratch_csrfile"),
 ]
 
 

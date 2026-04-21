@@ -78,14 +78,19 @@ def verilator_bin() -> str:
 
 
 def _generate_clint_plic_sv(arch_bin: str, out_dir: Path) -> list[Path]:
-    """Run the existing arch-com pipeline to produce CLINT + PLIC `.sv`.
+    """Run the existing arch-com pipeline to produce CLINT + PLIC +
+    mscratch CsrFile `.sv`.
 
-    Uses the same RDL fixtures (`clint_basic`, `plic_basic`) that the
-    unit / sim tests consume, so the SoC-level test exercises the exact
-    same emitted HDL. Returns the list of generated .sv files.
+    Uses the same RDL fixtures (`clint_basic`, `plic_multictx`,
+    `mtrap_mscratch`) that the unit / sim tests consume, so the SoC-
+    level test exercises the exact same emitted HDL. The mtrap fixture
+    is Phase-6.5a's first swap-in target: its generated CsrFile is
+    instantiated inside the forked `ibex_cs_registers_hybrid.sv` to
+    back Ibex's mscratch storage. Returns the list of generated .sv
+    files.
     """
     from systemrdl import RDLCompiler
-    from rdl2arch_riscv import RiscvClintExporter, RiscvPlicExporter
+    from rdl2arch_riscv import RiscvClintExporter, RiscvCsrExporter, RiscvPlicExporter
     from rdl2arch_riscv.udps import ALL_UDPS
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -97,8 +102,9 @@ def _generate_clint_plic_sv(arch_bin: str, out_dir: Path) -> list[Path]:
     # Phase-6.4 multictx_isr test share the SoC build with the
     # Phase-6.2 / 6.3 ones.
     for rdl_name, exporter_cls in (
-        ("clint_basic", RiscvClintExporter),
-        ("plic_multictx", RiscvPlicExporter),
+        ("clint_basic",    RiscvClintExporter),
+        ("plic_multictx",  RiscvPlicExporter),
+        ("mtrap_mscratch", RiscvCsrExporter),
     ):
         stage = out_dir / rdl_name
         stage.mkdir(exist_ok=True)
@@ -165,14 +171,28 @@ def _fusesoc_setup(ibex_root: Path, build_root: Path, fusesoc_bin: str) -> Path:
     return vc_candidates[0]
 
 
+# Source-file basenames that appear in fusesoc's .vc but must NOT be
+# passed to Verilator, because we compile a patched copy of the file
+# in-tree under tests/cpu/soc/ instead. Keeping both would be a
+# duplicate-module-definition error.
+_SV_SHADOWED_BY_FORKS = {
+    # Phase 6.5: patched to route mscratch through our generated
+    # CsrFile (see `tests/cpu/soc/ibex_cs_registers_hybrid.sv`).
+    "ibex_cs_registers.sv",
+}
+
+
 def _strip_top_and_exe(vc_path: Path) -> str:
     """Return the .vc contents with the fusesoc-tagged top-module /
-    parameter / exe lines removed. We set our own top (`ibex_mini_soc`)
-    and its parameter surface is a strict subset of `ibex_top_tracing`,
-    so the fusesoc-supplied `-GRV32E=0` etc. would error out with
-    "parameters from the command line were not found in the design".
-    Keep the `-D` macro defines — those configure ibex_pkg itself and
-    our top needs them too."""
+    parameter / exe lines removed, plus any upstream SV file we're
+    replacing with an in-tree fork.
+
+    We set our own top (`ibex_mini_soc`) and its parameter surface is
+    a strict subset of `ibex_top_tracing`, so the fusesoc-supplied
+    `-GRV32E=0` etc. would error out with "parameters from the
+    command line were not found in the design". Keep the `-D` macro
+    defines — those configure ibex_pkg itself and our top needs them
+    too."""
     out = []
     for line in vc_path.read_text().splitlines():
         s = line.strip()
@@ -181,6 +201,9 @@ def _strip_top_and_exe(vc_path: Path) -> str:
             or s == "--exe"
             or s.startswith("-G")      # top-level parameters, now stale
         ):
+            continue
+        # Drop upstream SV files we've forked in-tree.
+        if Path(s).name in _SV_SHADOWED_BY_FORKS:
             continue
         out.append(line)
     return "\n".join(out) + "\n"
@@ -214,10 +237,14 @@ def ibex_soc_filelist(
     stripped_vc = vc_path.with_suffix(".stripped.vc")
     stripped_vc.write_text(stripped)
 
-    # 3. Our hand-written SoC glue.
+    # 3. Our hand-written SoC glue + in-tree forks of upstream Ibex
+    #    modules. `ibex_cs_registers_hybrid.sv` keeps upstream's
+    #    module name (`ibex_cs_registers`) so the instance inside
+    #    `ibex_core.sv` binds to it without ripple.
     soc_sv = [
         SOC_DIR / "obi_to_axi_lite.sv",
         SOC_DIR / "ibex_mini_soc.sv",
+        SOC_DIR / "ibex_cs_registers_hybrid.sv",
     ]
 
     # 4. Shared Ibex sim helpers that sim_shared ships (ram_2p, simulator_ctrl).

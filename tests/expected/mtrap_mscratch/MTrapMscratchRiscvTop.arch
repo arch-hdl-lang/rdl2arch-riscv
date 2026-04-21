@@ -1,0 +1,74 @@
+use MTrapMscratchCsrFilePkg;
+
+module MTrapMscratchRiscvTop
+  port clk: in Clock<SysDomain>;
+  port rst: in Reset<Sync>;
+
+  port csr_cmd_valid: in  Bool;
+  port csr_cmd_ready: out Bool;
+  port csr_cmd_addr:  in  UInt<12>;
+  port csr_cmd_wdata: in  UInt<32>;
+  port csr_rsp_valid: out Bool;
+  port csr_rsp_rdata: out UInt<32>;
+  port csr_opcode: in  UInt<3>;
+  port cur_priv:   in  UInt<2>;
+  port trap_enter: in  Bool;
+
+  port granted:    out Bool;
+  port illegal:    out Bool;
+  port cause:      out UInt<5>;
+
+  wire granted_w: Bool;
+  wire illegal_w: Bool;
+  wire cause_w:   UInt<5>;
+  wire cmd_ready_w: Bool;
+  wire cmd_op_w:   UInt<2>;
+  wire rsp_valid_w: Bool;
+  wire rsp_rdata_w: UInt<32>;
+  wire hwif_live_w:  MTrapMscratchCsrFileHwifIn;
+  wire hwif_drive_w: MTrapMscratchCsrFileHwifIn;
+  wire hwif_out_w:   MTrapMscratchCsrFileHwifOut;
+
+  comb
+
+    cmd_op_w = csr_opcode[1:0];
+    csr_cmd_ready = cmd_ready_w;
+    csr_rsp_valid = rsp_valid_w;
+    csr_rsp_rdata = rsp_rdata_w;
+    granted = granted_w;
+    illegal = illegal_w;
+    cause   = cause_w;
+  end comb
+
+  inst access: MTrapMscratchCsrAccess
+    csr_addr   <- csr_cmd_addr;
+    csr_opcode <- csr_opcode;
+    cur_priv   <- cur_priv;
+    valid      <- csr_cmd_valid;
+    granted    -> granted_w;
+    illegal    -> illegal_w;
+    cause      -> cause_w;
+  end inst access
+
+  inst trap: MTrapMscratchCsrTrapCoord
+    clk <- clk; rst <- rst;
+    trap_enter <- trap_enter;
+    hwif_in_live  <- hwif_live_w;
+    hwif_in_drive -> hwif_drive_w;
+  end inst trap
+
+  inst csr: MTrapMscratchCsrFile
+    clk <- clk; rst <- rst;
+    csr.cmd_valid <- csr_cmd_valid;
+    csr.cmd_ready -> cmd_ready_w;
+    csr.cmd_addr  <- csr_cmd_addr;
+    csr.cmd_op    <- cmd_op_w;
+    csr.cmd_wdata <- csr_cmd_wdata;
+    csr.rsp_valid -> rsp_valid_w;
+    csr.rsp_rdata -> rsp_rdata_w;
+    granted <- granted_w;
+    hwif_in  <- hwif_drive_w;
+    hwif_out -> hwif_out_w;
+  end inst csr
+
+end module MTrapMscratchRiscvTop
