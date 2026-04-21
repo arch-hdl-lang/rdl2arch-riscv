@@ -1,0 +1,3 @@
+# Ibex tracer output
+trace_core_*.log
+ibex_mini_soc.log

@@ -21,7 +21,7 @@ later phase).
   - ✅ Phase 5.2b — Spec-compliant claim / complete. Per-context in-service bitmap: a SW **read** of the claim reg latches the returned source as in-service (masks it from further arbitration on this context); a SW **write** clears the matching bit. Consumes upstream `emit_read_pulse` / `emit_write_pulse` UDPs so no side-channel is needed. Edge detection remains a follow-up.
 - 🚧 Phase 6 — CPU integration (lowRISC Ibex + our CLINT/PLIC as a SoC).
   - ✅ Phase 6.1 — SoC scaffold: `ibex_mini_soc.sv` (top), `obi_to_axi_lite.sv` (single-transaction OBI↔AXI4-Lite bridge), memory map for RAM + simulator_ctrl + CLINT + PLIC. Verilator `--lint-only` passes — generated HDL composes with a real RV32IMC core. See `tests/cpu/`.
-  - 🚧 Phase 6.2 — Timer-ISR hand-written program + cocotb testbench proving the full interrupt loop (`mtvec` → CLINT `mtimecmp` → trap → `mcause` check → `mret`).
+  - ✅ Phase 6.2 — Timer-ISR end-to-end. Hand-written RV32 program (`tests/cpu/sw/timer_isr.S`) sets up `mtvec` + `mie.MTIE` + CLINT `mtimecmp` + `mstatus.MIE`, busy-waits; cocotb testbench releases reset, waits for the program to hit a completion sentinel in RAM, and asserts `mcause == 0x80000007` (M-timer interrupt bit), `mip.MTIP == 1` at trap entry, and `mepc` inside the busy-wait loop. Drives the full path: `ClintLogic.mtip_out` → `ibex.irq_timer_i` → trap → vector table → handler → `mret`.
   - 🚧 Phase 6.3 — Software-interrupt (`msip`) and external-interrupt (PLIC source + claim/complete from the ISR) variants.
 
 ## Install
