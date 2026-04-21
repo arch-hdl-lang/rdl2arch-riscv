@@ -1,0 +1,39 @@
+package MTrapIbexCsrFilePkg
+
+  enum MTrapIbexCsrFileAddr
+    Mscratch,
+    Mtvec
+  end enum MTrapIbexCsrFileAddr
+
+  struct MscratchReg
+    value: UInt<32>;
+  end struct MscratchReg
+
+  struct MtvecReg
+    mode: UInt<2>;
+    base: UInt<30>;
+  end struct MtvecReg
+
+  struct MTrapIbexCsrFileHwifIn
+    _reserved: UInt<1>;
+  end struct MTrapIbexCsrFileHwifIn
+
+  struct MTrapIbexCsrFileHwifOut
+    mscratch_value: UInt<32>;
+    mtvec_mode: UInt<2>;
+    mtvec_base: UInt<30>;
+  end struct MTrapIbexCsrFileHwifOut
+
+  bus MTrapIbexCsrFileBus
+    handshake cmd: send kind: valid_ready
+      addr:  UInt<12>;
+      op:    UInt<2>;
+      wdata: UInt<32>;
+    end handshake cmd
+
+    handshake rsp: receive kind: valid_only
+      rdata: UInt<32>;
+    end handshake rsp
+  end bus MTrapIbexCsrFileBus
+
+end package MTrapIbexCsrFilePkg

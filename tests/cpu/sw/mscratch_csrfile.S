@@ -2,7 +2,7 @@
 //
 // After Phase 6.5a, the forked `ibex_cs_registers_hybrid.sv` routes
 // every access to CSR 0x340 through our generated
-// `MTrapMscratchCsrFile` — Ibex's internal `u_mscratch_csr` storage
+// `MTrapIbexCsrFile` — Ibex's internal `u_mscratch_csr` storage
 // was removed. This program exercises that path from RISC-V:
 //
 //   1. Write pattern_a = 0xC0FFEE42 to mscratch.

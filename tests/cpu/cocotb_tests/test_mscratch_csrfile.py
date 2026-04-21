@@ -2,7 +2,7 @@
 
 Our forked `ibex_cs_registers_hybrid.sv` removed Ibex's internal
 `u_mscratch_csr` instance entirely — mscratch storage now lives inside
-the generated `MTrapMscratchCsrFile`. This test proves the swap is
+the generated `MTrapIbexCsrFile`. This test proves the swap is
 live by:
 
   1. Running a tiny RV32 program that writes / reads mscratch twice

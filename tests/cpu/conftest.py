@@ -82,7 +82,7 @@ def _generate_clint_plic_sv(arch_bin: str, out_dir: Path) -> list[Path]:
     mscratch CsrFile `.sv`.
 
     Uses the same RDL fixtures (`clint_basic`, `plic_multictx`,
-    `mtrap_mscratch`) that the unit / sim tests consume, so the SoC-
+    `mtrap_ibex`) that the unit / sim tests consume, so the SoC-
     level test exercises the exact same emitted HDL. The mtrap fixture
     is Phase-6.5a's first swap-in target: its generated CsrFile is
     instantiated inside the forked `ibex_cs_registers_hybrid.sv` to
@@ -101,10 +101,15 @@ def _generate_clint_plic_sv(arch_bin: str, out_dir: Path) -> list[Path]:
     # behaviour is identical. Using multictx everywhere lets the
     # Phase-6.4 multictx_isr test share the SoC build with the
     # Phase-6.2 / 6.3 ones.
+    #
+    # mtrap_ibex is the progressive M-trap CSR fixture that grows
+    # across Phase-6.5 sub-phases (mscratch, mtvec, …). Its generated
+    # CsrFile is instanced inside `ibex_cs_registers_hybrid.sv` to
+    # back whichever CSRs we've migrated.
     for rdl_name, exporter_cls in (
         ("clint_basic",    RiscvClintExporter),
         ("plic_multictx",  RiscvPlicExporter),
-        ("mtrap_mscratch", RiscvCsrExporter),
+        ("mtrap_ibex",     RiscvCsrExporter),
     ):
         stage = out_dir / rdl_name
         stage.mkdir(exist_ok=True)
