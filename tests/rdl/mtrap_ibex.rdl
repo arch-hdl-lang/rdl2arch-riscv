@@ -1,0 +1,42 @@
+// Phase-6.5 progressive M-trap CSR fixture — the set of CSRs we've
+// migrated out of Ibex's `ibex_cs_registers.sv` and onto our generated
+// `CsrFile`. Grows across Phase-6.5 sub-phases:
+//
+//   6.5a — mscratch  (plain RW, no CPU-side side-effects)
+//   6.5b — + mtvec   (plain RW, but also read by Ibex's if_stage via
+//                     `csr_mtvec_o` for trap-PC calc)
+//   6.5c — + mepc/mcause/mtval  (HW-written on trap entry)
+//   6.5d — + mstatus                (auto-clear MIE on trap, restore
+//                                    from MPIE on mret)
+//   6.5e — + mie/mip                (mip is combinational mirror of
+//                                    live IRQ lines)
+//
+// Anything not yet in this fixture stays on Ibex's native path inside
+// the forked `ibex_cs_registers_hybrid.sv`.
+
+addrmap m_trap_ibex {
+    default riscv_priv = "m";
+
+    reg {
+        // mtvec. Kept with a lean WARL profile for now: mode is a 2-bit
+        // enum legal for {direct (0), vectored (1)}; base is 30 bits.
+        //
+        // Ibex's hardware always forces `mtvec.MODE = 01` (vectored).
+        // Our generated WARL accepts either value and preserves it —
+        // SW setting mtvec to an aligned trap_entry address lands
+        // mode=0 (direct). Functionally fine in this hybrid because
+        // our vector table at `trap_entry` is 32 copies of
+        // `j common_trap_handler`, so direct-mode dispatch still hits
+        // the same entry. See `tests/cpu/sw/*.S` + cs_registers_hybrid
+        // comments.
+        riscv_csr_addr = 0x305;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_warl = "0,1"; } mode[1:0];
+        field { sw = rw; hw = r; reset = 0x0; } base[31:2];
+    } mtvec @ 0x4;
+
+    reg {
+        riscv_csr_addr = 0x340;
+        field { sw = rw; hw = r; reset = 0x0; } value[31:0];
+    } mscratch @ 0x0;
+};

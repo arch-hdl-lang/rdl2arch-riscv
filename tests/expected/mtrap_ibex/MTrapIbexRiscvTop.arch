@@ -1,6 +1,6 @@
-use MTrapMscratchCsrFilePkg;
+use MTrapIbexCsrFilePkg;
 
-module MTrapMscratchRiscvTop
+module MTrapIbexRiscvTop
   port clk: in Clock<SysDomain>;
   port rst: in Reset<Sync>;
 
@@ -25,9 +25,9 @@ module MTrapMscratchRiscvTop
   wire cmd_op_w:   UInt<2>;
   wire rsp_valid_w: Bool;
   wire rsp_rdata_w: UInt<32>;
-  wire hwif_live_w:  MTrapMscratchCsrFileHwifIn;
-  wire hwif_drive_w: MTrapMscratchCsrFileHwifIn;
-  wire hwif_out_w:   MTrapMscratchCsrFileHwifOut;
+  wire hwif_live_w:  MTrapIbexCsrFileHwifIn;
+  wire hwif_drive_w: MTrapIbexCsrFileHwifIn;
+  wire hwif_out_w:   MTrapIbexCsrFileHwifOut;
 
   comb
 
@@ -40,7 +40,7 @@ module MTrapMscratchRiscvTop
     cause   = cause_w;
   end comb
 
-  inst access: MTrapMscratchCsrAccess
+  inst access: MTrapIbexCsrAccess
     csr_addr   <- csr_cmd_addr;
     csr_opcode <- csr_opcode;
     cur_priv   <- cur_priv;
@@ -50,14 +50,14 @@ module MTrapMscratchRiscvTop
     cause      -> cause_w;
   end inst access
 
-  inst trap: MTrapMscratchCsrTrapCoord
+  inst trap: MTrapIbexCsrTrapCoord
     clk <- clk; rst <- rst;
     trap_enter <- trap_enter;
     hwif_in_live  <- hwif_live_w;
     hwif_in_drive -> hwif_drive_w;
   end inst trap
 
-  inst csr: MTrapMscratchCsrFile
+  inst csr: MTrapIbexCsrFile
     clk <- clk; rst <- rst;
     csr.cmd_valid <- csr_cmd_valid;
     csr.cmd_ready -> cmd_ready_w;
@@ -71,4 +71,4 @@ module MTrapMscratchRiscvTop
     hwif_out -> hwif_out_w;
   end inst csr
 
-end module MTrapMscratchRiscvTop
+end module MTrapIbexRiscvTop

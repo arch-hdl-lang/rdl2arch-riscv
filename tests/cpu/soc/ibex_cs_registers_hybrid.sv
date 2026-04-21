@@ -14,19 +14,24 @@
  * instance in `ibex_core.sv` binds without modification; only
  * internals change.
  *
- * Phase 6.5a (this file's first revision): route ONLY `mscratch`
- * (CSR 0x340) through the generated `MTrapMscratchCsrFile`. Every
- * other CSR stays on Ibex's native path.
+ * CSRs migrated onto `MTrapIbexCsrFile` so far:
+ *   6.5a — mscratch  (plain RW, no side-effects)
+ *   6.5b — mtvec     (plain RW, but also exported via `csr_mtvec_o`
+ *                      for Ibex's if_stage trap-PC calc. We also
+ *                      replay Ibex's post-reset `csr_mtvec_init_i`
+ *                      pulse as a bus write so the CsrFile's mtvec
+ *                      storage matches upstream on boot.)
  *
- * Look for `BEGIN rdl2arch` / `END rdl2arch` comment markers for the
- * exact diffs against upstream.
+ * Everything else stays on Ibex's native path. Look for
+ * `BEGIN rdl2arch` / `END rdl2arch` comment markers for the exact
+ * diffs against upstream.
  */
 
 `include "prim_assert.sv"
 
 // BEGIN rdl2arch: extend the module-scope import list with our
 // generated CsrFile's package — no $unit pollution.
-module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
+module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 // END rdl2arch
   parameter bit                     DbgTriggerEn                = 0,
   parameter int unsigned            DbgHwBreakNum               = 1,
@@ -238,7 +243,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
   irqs_t       mie_q, mie_d;
   logic        mie_en;
   // BEGIN rdl2arch: `mscratch_q`/`mscratch_en` removed — mscratch now
-  // lives inside the generated `MTrapMscratchCsrFile` instanced at the
+  // lives inside the generated `MTrapIbexCsrFile` instanced at the
   // bottom of this module. The bus' `rsp_rdata` drives the read mux
   // arm; the write path is fed directly from Ibex's CSR-op signals.
   logic [31:0] mscratch_rsp_rdata;
@@ -249,9 +254,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
   logic        mcause_en;
   logic [31:0] mtval_q, mtval_d;
   logic        mtval_en;
-  logic [31:0] mtvec_q, mtvec_d;
-  logic        mtvec_err;
-  logic        mtvec_en;
+  // BEGIN rdl2arch: `mtvec_q`/`mtvec_d`/`mtvec_en`/`mtvec_err`
+  // removed — mtvec now lives in the same `MTrapIbexCsrFile`
+  // instance that owns mscratch. Its read rdata is surfaced on
+  // `mtvec_rsp_rdata`; the base/mode values consumed by
+  // `csr_mtvec_o` come off the file's `hwif_out.mtvec_*` ports.
+  logic [31:0] mtvec_rsp_rdata;
+  // END rdl2arch
   irqs_t       mip;
   dcsr_t       dcsr_q, dcsr_d;
   logic        dcsr_en;
@@ -400,12 +409,14 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
         csr_rdata_int = '0;
       end
 
-      // BEGIN rdl2arch: routed to generated MTrapMscratchCsrFile.
+      // BEGIN rdl2arch: routed to generated MTrapIbexCsrFile.
       CSR_MSCRATCH: csr_rdata_int = mscratch_rsp_rdata;
       // END rdl2arch
 
       // mtvec: trap-vector base address
-      CSR_MTVEC: csr_rdata_int = mtvec_q;
+      // BEGIN rdl2arch: routed to generated MTrapIbexCsrFile.
+      CSR_MTVEC: csr_rdata_int = mtvec_rsp_rdata;
+      // END rdl2arch
 
       // mepc: exception program counter
       CSR_MEPC: csr_rdata_int = mepc_q;
@@ -605,11 +616,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
                      lower_cause: csr_wdata_int[4:0]};
     mtval_en     = 1'b0;
     mtval_d      = csr_wdata_int;
-    mtvec_en     = csr_mtvec_init_i;
-    // mtvec.MODE set to vectored
-    // mtvec.BASE must be 256-byte aligned
-    mtvec_d      = csr_mtvec_init_i ? {boot_addr_i[31:8], 6'b0, 2'b01} :
-                                      {csr_wdata_int[31:8], 6'b0, 2'b01};
+    // BEGIN rdl2arch: `mtvec_en`/`mtvec_d` removed — both the SW
+    // write path and the `csr_mtvec_init_i`-driven reset write are
+    // now handled by the bus multiplexer at the bottom of this
+    // module, targeting the generated CsrFile.
+    // END rdl2arch
     dcsr_en      = 1'b0;
     dcsr_d       = dcsr_q;
     depc_d       = {csr_wdata_int[31:1], 1'b0};
@@ -670,8 +681,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
         // mtval: trap value
         CSR_MTVAL: mtval_en = 1'b1;
 
-        // mtvec
-        CSR_MTVEC: mtvec_en = 1'b1;
+        // BEGIN rdl2arch: upstream `CSR_MTVEC: mtvec_en = 1'b1;`
+        // removed — mtvec writes now go through the bus mux at the
+        // bottom of this module. A no-op arm keeps `unique case`
+        // happy (i.e. avoids `default: illegal_csr = 1'b1`).
+        CSR_MTVEC: ;
+        // END rdl2arch
 
         CSR_DCSR: begin
           dcsr_d = csr_wdata_int;
@@ -875,7 +890,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
   // directly output some registers
   assign csr_mepc_o  = mepc_q;
   assign csr_depc_o  = depc_q;
-  assign csr_mtvec_o = mtvec_q;
+  // BEGIN rdl2arch: mtvec comes from the generated CsrFile's
+  // hwif_out. The emitted packed-struct layout exposes the base +
+  // mode fields; we concat them to match upstream's 32-bit mtvec.
+  assign csr_mtvec_o = {ourfile_hwif_out.mtvec_base,
+                        ourfile_hwif_out.mtvec_mode};
+  // END rdl2arch
   assign csr_mtval_o = mtval_q;
 
   assign csr_mstatus_mie_o   = mstatus_q.mie;
@@ -946,7 +966,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
 
   // BEGIN rdl2arch: upstream `u_mscratch_csr ibex_csr` instance
   // removed — mscratch storage has moved to the generated
-  // `MTrapMscratchCsrFile` block at the bottom of this module.
+  // `MTrapIbexCsrFile` block at the bottom of this module.
   // END rdl2arch
 
   // MCAUSE
@@ -977,19 +997,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
     .rd_error_o()
   );
 
-  // MTVEC
-  ibex_csr #(
-    .Width     (32),
-    .ShadowCopy(ShadowCSR),
-    .ResetValue(32'd1)
-  ) u_mtvec_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i (mtvec_d),
-    .wr_en_i   (mtvec_en),
-    .rd_data_o (mtvec_q),
-    .rd_error_o(mtvec_err)
-  );
+  // BEGIN rdl2arch: upstream `u_mtvec_csr ibex_csr` instance removed.
+  // mtvec storage now lives in the generated `MTrapIbexCsrFile` at
+  // the bottom of this module. Both SW writes and the `csr_mtvec_init_i`
+  // replay go through that file's bus.
+  // END rdl2arch
 
   // DCSR
   localparam dcsr_t DCSR_RESET_VAL = '{
@@ -1693,8 +1705,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
     .rd_error_o(cpuctrlsts_part_err)
   );
 
+  // BEGIN rdl2arch: `mtvec_err` removed. Our generated CsrFile
+  // doesn't implement shadow-copy error detection (yet) on the
+  // CSRs we've migrated, so that term drops out of the OR.
   assign csr_shadow_err_o =
-    mstatus_err | mtvec_err | pmp_csr_err | cpuctrlsts_part_err | cpuctrlsts_ic_scr_key_err;
+    mstatus_err | pmp_csr_err | cpuctrlsts_part_err | cpuctrlsts_ic_scr_key_err;
+  // END rdl2arch
 
   ////////////////
   // Assertions //
@@ -1703,30 +1719,26 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
   `ASSERT(IbexCsrOpEnRequiresAccess, csr_op_en_i |-> csr_access_i)
 
   ////////////////////////////////////////////////////////////////////
-  // BEGIN rdl2arch — generated CSR file attachment (Phase 6.5a)    //
+  // BEGIN rdl2arch — generated CSR file attachment (Phase 6.5b)    //
   //                                                                //
-  // One `MTrapMscratchCsrFile` instance holds the live state for   //
-  // the CSRs we've migrated out of Ibex. In 6.5a that's only       //
-  // mscratch (CSR 0x340); 6.5b+ will add more.                     //
+  // One `MTrapIbexCsrFile` instance holds the live state for the   //
+  // CSRs we've migrated out of Ibex. Currently mscratch (0x340)    //
+  // and mtvec (0x305). 6.5c+ will add more.                        //
   //                                                                //
-  // Wiring, per the emitted bus `MTrapMscratchCsrFileBus`:         //
-  //   * cmd_valid asserts only when Ibex is firing a CSR op AND    //
-  //     the target is handled by this file. `csr_op_i` matches     //
-  //     our bus op encoding (0=READ, 1=WRITE, 2=SET, 3=CLEAR) on   //
-  //     both sides, so we forward it directly.                     //
-  //   * cmd_ready is tied high inside the generated file; writes   //
-  //     latch on the next edge.                                    //
+  // Wiring, per the emitted `MTrapIbexCsrFileBus`:                 //
+  //   * cmd_valid = (csr_op_en_i & addr-is-ours) | mtvec-init.     //
+  //     We replay Ibex's post-reset `csr_mtvec_init_i` pulse as a  //
+  //     bus WRITE so the CsrFile's mtvec matches upstream on boot. //
+  //   * cmd_addr / cmd_op / cmd_wdata muxed between SW and init.   //
   //   * rsp_rdata is combinational from cmd_addr — Ibex expects    //
-  //     csr_rdata_o valid on the same cycle as csr_op_en, which    //
-  //     matches.                                                   //
+  //     csr_rdata_o valid on the same cycle as csr_op_en, matches. //
   //   * `granted = 1`: Ibex-only-M core, and the priv / R-O checks //
   //     already happen in the core's existing illegal_csr_* logic  //
   //     above. We'll hook up the generated access controller in a  //
   //     later sub-phase.                                           //
-  //   * `hwif_in` has only a `_reserved` placeholder for mscratch; //
-  //     we tie it off. `hwif_out.mscratch_value` is currently      //
-  //     unused in the core but will be consumed by the trap        //
-  //     coordinator once we migrate mepc/mcause/mtval.             //
+  //   * `hwif_in` for hw=r fields is just the placeholder struct — //
+  //     we tie it off. `hwif_out.mtvec_{base,mode}` feeds the      //
+  //     module-level `csr_mtvec_o` output.                         //
   ////////////////////////////////////////////////////////////////////
 
   logic                             ourfile_cmd_valid;
@@ -1736,28 +1748,49 @@ module ibex_cs_registers import ibex_pkg::*, MTrapMscratchCsrFilePkg::*; #(
   logic [31:0]                      ourfile_cmd_wdata;
   logic                             ourfile_rsp_valid;
   logic [31:0]                      ourfile_rsp_rdata;
-  MTrapMscratchCsrFileHwifIn        ourfile_hwif_in;
-  MTrapMscratchCsrFileHwifOut       ourfile_hwif_out;
+  MTrapIbexCsrFileHwifIn            ourfile_hwif_in;
+  MTrapIbexCsrFileHwifOut           ourfile_hwif_out;
 
   // addr selector — add more entries as later sub-phases migrate
   // additional CSRs.
   logic                             ourfile_owns_addr;
-  assign ourfile_owns_addr = (csr_addr_i == CSR_MSCRATCH);
+  assign ourfile_owns_addr = (csr_addr_i == CSR_MSCRATCH)
+                           | (csr_addr_i == CSR_MTVEC);
 
-  // cmd handshake — Ibex drives a new op every cycle it asserts
-  // csr_op_en_i; we forward only when the current addr is ours.
-  assign ourfile_cmd_valid = csr_op_en_i & ourfile_owns_addr;
-  assign ourfile_cmd_addr  = csr_addr_i;
-  assign ourfile_cmd_op    = csr_op_i;
-  assign ourfile_cmd_wdata = csr_wdata_int;
+  // SW-side cmd.
+  logic                             sw_cmd_valid;
+  logic [11:0]                      sw_cmd_addr;
+  logic [1:0]                       sw_cmd_op;
+  logic [31:0]                      sw_cmd_wdata;
+  assign sw_cmd_valid = csr_op_en_i & ourfile_owns_addr;
+  assign sw_cmd_addr  = csr_addr_i;
+  assign sw_cmd_op    = csr_op_i;
+  assign sw_cmd_wdata = csr_wdata_int;
+
+  // Post-reset mtvec-init replay. Matches upstream's formula:
+  //   mtvec_d = { boot_addr_i[31:8], 6'b0, 2'b01 }
+  // Our CsrFile's WARL accepts mode=01 as legal (enum {0,1}), so the
+  // `01` survives. The generator also stores `base[31:8]` wherever
+  // wdata bits match — the WARL on `base[31:2]` is all-accepting.
+  logic [31:0] mtvec_init_wdata;
+  assign mtvec_init_wdata = {boot_addr_i[31:8], 6'b0, 2'b01};
+
+  // Cmd mux — init pulse takes priority over SW (they never collide:
+  // csr_mtvec_init_i pulses post-reset, before the first CSR op).
+  assign ourfile_cmd_valid = sw_cmd_valid | csr_mtvec_init_i;
+  assign ourfile_cmd_addr  = csr_mtvec_init_i ? CSR_MTVEC        : sw_cmd_addr;
+  assign ourfile_cmd_op    = csr_mtvec_init_i ? 2'b01 /* WRITE */ : sw_cmd_op;
+  assign ourfile_cmd_wdata = csr_mtvec_init_i ? mtvec_init_wdata  : sw_cmd_wdata;
   assign ourfile_hwif_in   = '0;
 
-  // Surface rsp_rdata to the module-scope signal the read-case arm
-  // picks up. `rsp_valid` is unused here (we know ourfile_rsp_rdata
-  // is only meaningful when our cmd_valid fired this cycle).
+  // Surface rsp_rdata to both module-scope signals the read-case arms
+  // pick up. A single rsp channel services all addresses — the CsrFile
+  // internally muxes by cmd_addr, and we only *look at* the response
+  // on the cycle our cmd_valid fired for that addr.
   assign mscratch_rsp_rdata = ourfile_rsp_rdata;
+  assign mtvec_rsp_rdata    = ourfile_rsp_rdata;
 
-  MTrapMscratchCsrFile u_ourfile (
+  MTrapIbexCsrFile u_ourfile (
     .clk           (clk_i),
     // Ibex drives rst_ni active-low; the generated file takes a
     // synchronous active-high reset.
