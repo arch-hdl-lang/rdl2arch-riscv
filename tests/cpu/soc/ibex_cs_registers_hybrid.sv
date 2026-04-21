@@ -993,11 +993,18 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // reconstructs an `irqs_t` from our CsrFile's per-bit `hwif_out.
   // mie_*`. Upstream modelled 15 fast IRQs; our RDL models only
   // fast[0] so the upper 14 are effectively zero as a gate.
+  // `mie_rdata_flat` is the generator's spec-layout view of mie (same
+  // expression the SW readback mux returns for `csrr t0, mie`). Using
+  // it here keeps this adapter decoupled from the packed-struct field-
+  // naming convention — if the RDL's mie layout is repacked, we keep
+  // reading the right bits by spec number.
+  logic [31:0] mie_flat;
+  assign mie_flat = ourfile_hwif_out.mie_rdata_flat;
   irqs_t live_mie;
-  assign live_mie.irq_software = ourfile_hwif_out.mie_msie;
-  assign live_mie.irq_timer    = ourfile_hwif_out.mie_mtie;
-  assign live_mie.irq_external = ourfile_hwif_out.mie_meie;
-  assign live_mie.irq_fast     = {14'b0, ourfile_hwif_out.mie_mfie_0};
+  assign live_mie.irq_software = mie_flat[3];
+  assign live_mie.irq_timer    = mie_flat[7];
+  assign live_mie.irq_external = mie_flat[11];
+  assign live_mie.irq_fast     = mie_flat[30:16];
 
   assign irqs_o        = mip & live_mie;
   assign irq_pending_o = |irqs_o;
@@ -1916,16 +1923,19 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign ourfile_hwif_in_live.mie_wpri_15_12 = '0;
   assign ourfile_hwif_in_live.mie_wpri_hi    = '0;
 
-  // ── mip live-mirror drive ────────────────────────────────────
-  // mip is sw=r;hw=w — every bit comes from this adapter. The
-  // TrapCoord passes hwif_in_live through for non-save-cycle
-  // fields, so storage gets driven from the live irq_*_i inputs
-  // on every clock.  SW observes mip one cycle later; the
-  // controller-side `irqs_o` path above bypasses storage entirely.
-  assign ourfile_hwif_in_live.mip_msip   = irq_software_i;
-  assign ourfile_hwif_in_live.mip_mtip   = irq_timer_i;
-  assign ourfile_hwif_in_live.mip_meip   = irq_external_i;
-  assign ourfile_hwif_in_live.mip_mfip_0 = irq_fast_i[0];
+  // ── mip drives ───────────────────────────────────────────────
+  // The four active bits (msip/mtip/meip/mfip_0) are declared
+  // `riscv_hw_mirror = true` in the RDL, so the TrapCoord drives
+  // them unconditionally from its `mirror_mip_*` input ports
+  // (wired to the live `irq_*_i` signals on the instance below).
+  // `hwif_in_live` is ignored for those fields, so these assigns
+  // are don't-cares kept only so every struct member is driven.
+  // The WPRI fields still flow through hwif_in_live — tie them
+  // to 0 for read-as-zero.
+  assign ourfile_hwif_in_live.mip_msip       = '0;
+  assign ourfile_hwif_in_live.mip_mtip       = '0;
+  assign ourfile_hwif_in_live.mip_meip       = '0;
+  assign ourfile_hwif_in_live.mip_mfip_0     = '0;
   assign ourfile_hwif_in_live.mip_wpri_0_0   = '0;
   assign ourfile_hwif_in_live.mip_wpri_2_1   = '0;
   assign ourfile_hwif_in_live.mip_wpri_6_4   = '0;
@@ -1964,6 +1974,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     .restore_mstatus_mie  (ourfile_hwif_out.mstatus_mpie),
     .restore_mstatus_mpie (1'b1),
     .restore_mstatus_mpp  (PRIV_LVL_U),
+    // mip live-mirror ports — each wired straight to the Ibex
+    // core's module-level IRQ input.
+    .mirror_mip_msip      (irq_software_i),
+    .mirror_mip_mtip      (irq_timer_i),
+    .mirror_mip_meip      (irq_external_i),
+    .mirror_mip_mfip_0    (irq_fast_i[0]),
     .hwif_in_live        (ourfile_hwif_in_live),
     .hwif_in_drive       (ourfile_hwif_in)
   );

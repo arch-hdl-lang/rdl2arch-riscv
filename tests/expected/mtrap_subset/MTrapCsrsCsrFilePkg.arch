@@ -96,15 +96,23 @@ package MTrapCsrsCsrFilePkg
     mstatus_mie: UInt<1>;
     mstatus_mpie: UInt<1>;
     mstatus_mpp: UInt<2>;
+    mstatus_rdata_flat: UInt<32>;
     mtvec_mode: UInt<2>;
     mtvec_base: UInt<30>;
+    mtvec_rdata_flat: UInt<32>;
     mepc_epc: UInt<32>;
+    mepc_rdata_flat: UInt<32>;
     mcause_cause: UInt<32>;
+    mcause_rdata_flat: UInt<32>;
     mtval_tval: UInt<32>;
+    mtval_rdata_flat: UInt<32>;
     mscratch_value: UInt<32>;
+    mscratch_rdata_flat: UInt<32>;
     mie_msie: UInt<1>;
     mie_mtie: UInt<1>;
     mie_meie: UInt<1>;
+    mie_rdata_flat: UInt<32>;
+    mip_rdata_flat: UInt<32>;
   end struct MTrapCsrsCsrFileHwifOut
 
   bus MTrapCsrsCsrFileBus

@@ -167,18 +167,26 @@ module MTrapIbexCsrFile
     csr.rsp_rdata = csr.cmd_valid ? csr_rdata_mux : 0;
     hwif_out.mtvec_mode = mtvec_r.mode;
     hwif_out.mtvec_base = mtvec_r.base;
+    hwif_out.mtvec_rdata_flat = {mtvec_r.base, mtvec_r.mode};
     hwif_out.mepc_epc = mepc_r.epc;
+    hwif_out.mepc_rdata_flat = mepc_r.epc;
     hwif_out.mcause_cause = mcause_r.cause;
+    hwif_out.mcause_rdata_flat = mcause_r.cause;
     hwif_out.mtval_tval = mtval_r.tval;
+    hwif_out.mtval_rdata_flat = mtval_r.tval;
     hwif_out.mscratch_value = mscratch_r.value;
+    hwif_out.mscratch_rdata_flat = mscratch_r.value;
     hwif_out.mstatus_wpri_lo = mstatus_r.wpri_lo;
     hwif_out.mstatus_mie = mstatus_r.mie;
     hwif_out.mstatus_mpie = mstatus_r.mpie;
     hwif_out.mstatus_mpp = mstatus_r.mpp;
+    hwif_out.mstatus_rdata_flat = {19'h0, mstatus_r.mpp, 3'h0, mstatus_r.mpie, 3'h0, mstatus_r.mie, 2'h0, false};
     hwif_out.mie_msie = mie_r.msie;
     hwif_out.mie_mtie = mie_r.mtie;
     hwif_out.mie_meie = mie_r.meie;
     hwif_out.mie_mfie_0 = mie_r.mfie_0;
+    hwif_out.mie_rdata_flat = {15'h0, mie_r.mfie_0, 4'h0, mie_r.meie, 3'h0, mie_r.mtie, 3'h0, mie_r.msie, 2'h0, false};
+    hwif_out.mip_rdata_flat = {15'h0, mip_r.mfip_0, 4'h0, mip_r.meip, 3'h0, mip_r.mtip, 3'h0, mip_r.msip, 2'h0, false};
   end comb
 
 end module MTrapIbexCsrFile

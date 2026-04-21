@@ -13,6 +13,9 @@ module MTrapCsrsCsrTrapCoord
   port restore_mstatus_mie: in UInt<1>;
   port restore_mstatus_mpie: in UInt<1>;
   port restore_mstatus_mpp: in UInt<2>;
+  port mirror_mip_msip: in UInt<1>;
+  port mirror_mip_mtip: in UInt<1>;
+  port mirror_mip_meip: in UInt<1>;
   port hwif_in_live:  in  MTrapCsrsCsrFileHwifIn;
   port hwif_in_drive: out MTrapCsrsCsrFileHwifIn;
 
@@ -34,11 +37,11 @@ module MTrapCsrsCsrTrapCoord
     hwif_in_drive.mie_wpri_hi = hwif_in_live.mie_wpri_hi;
     hwif_in_drive.mip_wpri_0_0 = hwif_in_live.mip_wpri_0_0;
     hwif_in_drive.mip_wpri_2_1 = hwif_in_live.mip_wpri_2_1;
-    hwif_in_drive.mip_msip = hwif_in_live.mip_msip;
+    hwif_in_drive.mip_msip = mirror_mip_msip;
     hwif_in_drive.mip_wpri_6_4 = hwif_in_live.mip_wpri_6_4;
-    hwif_in_drive.mip_mtip = hwif_in_live.mip_mtip;
+    hwif_in_drive.mip_mtip = mirror_mip_mtip;
     hwif_in_drive.mip_wpri_10_8 = hwif_in_live.mip_wpri_10_8;
-    hwif_in_drive.mip_meip = hwif_in_live.mip_meip;
+    hwif_in_drive.mip_meip = mirror_mip_meip;
     hwif_in_drive.mip_wpri_hi = hwif_in_live.mip_wpri_hi;
   end comb
 end module MTrapCsrsCsrTrapCoord

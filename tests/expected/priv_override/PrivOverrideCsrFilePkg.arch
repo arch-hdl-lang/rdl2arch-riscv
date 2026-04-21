@@ -19,7 +19,9 @@ package PrivOverrideCsrFilePkg
 
   struct PrivOverrideCsrFileHwifOut
     mstatus_v: UInt<32>;
+    mstatus_rdata_flat: UInt<32>;
     debug_peek_v: UInt<32>;
+    debug_peek_rdata_flat: UInt<32>;
   end struct PrivOverrideCsrFileHwifOut
 
   bus PrivOverrideCsrFileBus
