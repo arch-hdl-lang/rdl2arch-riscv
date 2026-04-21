@@ -33,15 +33,28 @@ class PlicModel:
     hwif_in_struct: str
     hwif_out_struct: str
     pending: Optional[RegNode] = None
-    enable: Optional[RegNode] = None
-    threshold: Optional[RegNode] = None
-    claim: Optional[RegNode] = None
+    # Per-context registers — index in each list = context ID. All three
+    # lists must end up the same length (n_contexts); the scanner sorts
+    # by absolute address so the ordering matches the MMIO layout.
+    enables: list[RegNode] = dc_field(default_factory=list)
+    thresholds: list[RegNode] = dc_field(default_factory=list)
+    claims: list[RegNode] = dc_field(default_factory=list)
     priorities: list[RegNode] = dc_field(default_factory=list)
     n_sources: int = 0  # inclusive count of source IDs we've seen priority regs for
 
+    @property
+    def n_contexts(self) -> int:
+        return len(self.thresholds)
+
 
 def scan_plic(top: AddrmapNode, module_name: str, package_name: str) -> PlicModel:
-    """Walk the addrmap and bucket each reg by its PLIC role."""
+    """Walk the addrmap and bucket each reg by its PLIC role.
+
+    Multi-context fixtures declare one enable / threshold / claim reg
+    per context. Scanner sorts each by absolute address so context 0 is
+    the lowest-addressed one (matches SiFive convention: M-mode first,
+    then S-mode, etc.).
+    """
     model = PlicModel(
         top=top,
         module_name=module_name,
@@ -50,6 +63,9 @@ def scan_plic(top: AddrmapNode, module_name: str, package_name: str) -> PlicMode
         hwif_out_struct=module_name + "HwifOut",
     )
     priorities: list[RegNode] = []
+    enables: list[RegNode] = []
+    thresholds: list[RegNode] = []
+    claims: list[RegNode] = []
     # children(unroll=True) expands reg arrays into individual RegNode
     # instances, which is what we want for priority[N].
     for child in top.children(unroll=True):
@@ -63,34 +79,44 @@ def scan_plic(top: AddrmapNode, module_name: str, package_name: str) -> PlicMode
         elif role == "pending":
             model.pending = child
         elif role == "enable":
-            model.enable = child
+            enables.append(child)
         elif role == "threshold":
-            model.threshold = child
+            thresholds.append(child)
         elif role == "claim":
-            model.claim = child
-    # Sort priority registers by their array index so source i lines up
-    # with priorities[i]. systemrdl gives us inst_name like
-    # "priority[0]" / "priority[1]" / ... ; sort on numeric suffix.
+            claims.append(child)
+    # Sort priorities by array index (source ID).
     def _idx(r: RegNode) -> int:
-        # Each instance of an indexed reg has current_idx set.
         if r.current_idx is not None:
             return int(r.current_idx[-1])
         return 0
     priorities.sort(key=_idx)
+    # Sort per-context regs by absolute address (context ID ordering).
+    enables.sort(key=lambda r: r.absolute_address)
+    thresholds.sort(key=lambda r: r.absolute_address)
+    claims.sort(key=lambda r: r.absolute_address)
     model.priorities = priorities
+    model.enables = enables
+    model.thresholds = thresholds
+    model.claims = claims
     model.n_sources = len(priorities) - 1  # exclude the reserved source 0
     return model
 
 
 def _validate(model: PlicModel) -> None:
-    missing = []
-    for name in ("pending", "enable", "threshold", "claim"):
-        if getattr(model, name) is None:
-            missing.append(name)
-    if missing:
+    if model.pending is None:
+        raise ValueError("PLIC fixture missing a `pending` reg.")
+    for name in ("enables", "thresholds", "claims"):
+        if not getattr(model, name):
+            raise ValueError(
+                f"PLIC fixture missing `{name[:-1]}` reg(s). Each context "
+                f"needs its own enable / threshold / claim."
+            )
+    n_ctx = model.n_contexts
+    if len(model.enables) != n_ctx or len(model.claims) != n_ctx:
         raise ValueError(
-            f"PLIC fixture is missing reg(s) with role(s): {missing}. "
-            f"Each PLIC needs exactly one of pending / enable / threshold / claim."
+            f"PLIC context regs must match in count: got "
+            f"enables={len(model.enables)}, thresholds={len(model.thresholds)}, "
+            f"claims={len(model.claims)}"
         )
     if model.n_sources < 1:
         raise ValueError(
@@ -117,35 +143,38 @@ def _reg_field_name(reg: RegNode, field_inst_name: str) -> str:
 
 
 def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
-    """Generate the PlicLogic .arch source."""
+    """Generate the PlicLogic .arch source.
+
+    Emits one arbitration cascade per context; the winner per context is
+    packed into a single `intr_out: out UInt<N_contexts>` port (bit i =
+    context i's meip/seip/... output).
+    """
     _validate(model)
 
-    n = model.n_sources  # e.g. 8
+    n = model.n_sources
+    n_ctx = model.n_contexts
 
-    # Pick field names from the RDL model (user-chosen; the fixture uses
-    # `value` consistently but we shouldn't hard-code that).
+    # Field names (RDL-supplied; not hard-coded).
     pending_fld = next(iter(model.pending.fields())).inst_name
-    enable_fld = next(iter(model.enable.fields())).inst_name
-    threshold_fld = next(iter(model.threshold.fields())).inst_name
-    claim_fld = next(iter(model.claim.fields())).inst_name
+    enable_fld = next(iter(model.enables[0].fields())).inst_name
+    threshold_fld = next(iter(model.thresholds[0].fields())).inst_name
+    claim_fld = next(iter(model.claims[0].fields())).inst_name
     priority_fld = next(iter(model.priorities[0].fields())).inst_name
 
-    pending_hwif   = _reg_field_name(model.pending,   pending_fld)
-    enable_hwif    = _reg_field_name(model.enable,    enable_fld)
-    threshold_hwif = _reg_field_name(model.threshold, threshold_fld)
-    claim_hwif     = _reg_field_name(model.claim,     claim_fld)
+    pending_hwif = _reg_field_name(model.pending, pending_fld)
 
+    def enable_hwif(ctx: int) -> str:
+        return _reg_field_name(model.enables[ctx], enable_fld)
+    def threshold_hwif(ctx: int) -> str:
+        return _reg_field_name(model.thresholds[ctx], threshold_fld)
+    def claim_hwif(ctx: int) -> str:
+        return _reg_field_name(model.claims[ctx], claim_fld)
     def prio_hwif(i: int) -> str:
         return _reg_field_name(model.priorities[i], priority_fld)
 
     # Winner-ID width: enough to hold values 0..n.
-    id_bits = max(1, (n).bit_length())
-    if n + 1 <= (1 << id_bits):
-        # Fine as-is.
-        pass
-    id_w = id_bits
-    prio_w = 3  # hard-coded by the fixture's field width for now; could
-                # derive from the RDL if we let the user pick other widths.
+    id_w = max(1, n.bit_length())
+    prio_w = 3  # fixture-chosen; generator could derive from RDL width.
 
     lines: list[str] = []
     lines.append(f"use {model.package_name};")
@@ -156,47 +185,57 @@ def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
     lines.append(f"  port source_in: in UInt<{n + 1}>;")
     lines.append(f"  port hwif_out:  in  {model.hwif_out_struct};")
     lines.append(f"  port hwif_in:   out {model.hwif_in_struct};")
-    lines.append("  port meip_out:  out Bool;")
+    lines.append(f"  port intr_out:  out UInt<{n_ctx}>;")
     lines.append("")
 
-    # Per-source candidate flags.
-    for i in range(1, n + 1):
+    # Per-context arbitration cascade.
+    for ctx in range(n_ctx):
+        lines.append(f"  // ── context {ctx} ──")
+        for i in range(1, n + 1):
+            lines.append(
+                f"  let c{ctx}_cand_{i}: Bool = source_in[{i}] and "
+                f"hwif_out.{enable_hwif(ctx)}[{i}] and "
+                f"(hwif_out.{prio_hwif(i)} > hwif_out.{threshold_hwif(ctx)});"
+            )
         lines.append(
-            f"  let cand_{i}: Bool = source_in[{i}] and "
-            f"hwif_out.{enable_hwif}[{i}] and "
-            f"(hwif_out.{prio_hwif(i)} > hwif_out.{threshold_hwif});"
-        )
-    lines.append("")
-
-    # Linear cascade: maintain `(w<i>_id, w<i>_prio)` = best candidate among
-    # sources 1..i. Tie-break toward the lowest ID (strict `>` on the
-    # update predicate keeps the earlier source on equal priority).
-    lines.append(
-        f"  let w1_id:   UInt<{id_w}> = cand_1 ? {id_w}'h1 : {id_w}'h0;"
-    )
-    lines.append(
-        f"  let w1_prio: UInt<{prio_w}> = cand_1 ? hwif_out.{prio_hwif(1)} : {prio_w}'h0;"
-    )
-    for i in range(2, n + 1):
-        lines.append(
-            f"  let w{i}_take: Bool = cand_{i} and "
-            f"(w{i-1}_id == {id_w}'h0 or hwif_out.{prio_hwif(i)} > w{i-1}_prio);"
+            f"  let c{ctx}_w1_id:   UInt<{id_w}> = c{ctx}_cand_1 ? {id_w}'h1 : {id_w}'h0;"
         )
         lines.append(
-            f"  let w{i}_id:   UInt<{id_w}> = w{i}_take ? {id_w}'h{i:x} : w{i-1}_id;"
+            f"  let c{ctx}_w1_prio: UInt<{prio_w}> = c{ctx}_cand_1 ? "
+            f"hwif_out.{prio_hwif(1)} : {prio_w}'h0;"
         )
-        lines.append(
-            f"  let w{i}_prio: UInt<{prio_w}> = w{i}_take ? hwif_out.{prio_hwif(i)} : w{i-1}_prio;"
-        )
-    lines.append("")
+        for i in range(2, n + 1):
+            lines.append(
+                f"  let c{ctx}_w{i}_take: Bool = c{ctx}_cand_{i} and "
+                f"(c{ctx}_w{i-1}_id == {id_w}'h0 or hwif_out.{prio_hwif(i)} > c{ctx}_w{i-1}_prio);"
+            )
+            lines.append(
+                f"  let c{ctx}_w{i}_id:   UInt<{id_w}> = c{ctx}_w{i}_take ? "
+                f"{id_w}'h{i:x} : c{ctx}_w{i-1}_id;"
+            )
+            lines.append(
+                f"  let c{ctx}_w{i}_prio: UInt<{prio_w}> = c{ctx}_w{i}_take ? "
+                f"hwif_out.{prio_hwif(i)} : c{ctx}_w{i-1}_prio;"
+            )
+        lines.append("")
 
     lines.append("  comb")
-    # Pending register passthrough — SW-visible view of current source levels.
+    # Pending register passthrough — SW-visible view of source_in.
     lines.append(f"    hwif_in.{pending_hwif} = source_in;")
-    # Winner ID → claim reg (SW reads it).
-    lines.append(f"    hwif_in.{claim_hwif} = w{n}_id;")
-    # → CSR file's mip.meip
-    lines.append(f"    meip_out = w{n}_id != {id_w}'h0;")
+    # Per-context claim registers + intr_out bits.
+    for ctx in range(n_ctx):
+        lines.append(f"    hwif_in.{claim_hwif(ctx)} = c{ctx}_w{n}_id;")
+    # intr_out[i] = context i has a winner. Build as a concat literal —
+    # emitted MSB-first per ARCH convention so bit 0 (context 0) is the
+    # last element in the `{...}` expression.
+    fired = ", ".join(
+        f"(c{ctx}_w{n}_id != {id_w}'h0)"
+        for ctx in range(n_ctx - 1, -1, -1)
+    )
+    if n_ctx == 1:
+        lines.append(f"    intr_out = c0_w{n}_id != {id_w}'h0;")
+    else:
+        lines.append(f"    intr_out = {{{fired}}};")
     lines.append("  end comb")
     lines.append(f"end module {logic_module_name}")
     lines.append("")

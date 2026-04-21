@@ -1,0 +1,64 @@
+// PLIC fixture — 8-source, 2-context (M + S) layout.
+//
+// Builds on `plic_basic.rdl` by adding a second context: each context
+// gets its own enable bitmap, threshold, and claim register. Source
+// priorities and the pending bitmap are shared across contexts. Per-
+// context arbitration runs independently, producing a 2-bit `intr_out`
+// (bit 0 = context 0 → mip.meip; bit 1 = context 1 → mip.seip).
+//
+// Address layout (SiFive convention):
+//   0x2000 + ctx·0x80     enable_ctx
+//   0x200000 + ctx·0x1000 threshold_ctx
+//   0x200004 + ctx·0x1000 claim_ctx
+
+addrmap plic_multictx {
+    reg {
+        riscv_intr_plic_role = "priority";
+        field { sw = rw; hw = r; reset = 0x0; } value[2:0];
+        field { sw = r;  hw = r; reset = 0x0; } reserved[31:3];
+    } priority[9] @ 0x0000;
+
+    reg {
+        riscv_intr_plic_role = "pending";
+        field { sw = r; hw = w; reset = 0x0; } value[8:0];
+        field { sw = r; hw = r; reset = 0x0; } reserved[31:9];
+    } pending @ 0x1000;
+
+    // Context 0 (M-mode) — lower address per context, scanner sorts
+    // context ordering by address.
+    reg {
+        riscv_intr_plic_role = "enable";
+        field { sw = rw; hw = r; reset = 0x0; } value[8:0];
+        field { sw = r;  hw = r; reset = 0x0; } reserved[31:9];
+    } enable_0 @ 0x2000;
+
+    reg {
+        riscv_intr_plic_role = "enable";
+        field { sw = rw; hw = r; reset = 0x0; } value[8:0];
+        field { sw = r;  hw = r; reset = 0x0; } reserved[31:9];
+    } enable_1 @ 0x2080;
+
+    reg {
+        riscv_intr_plic_role = "threshold";
+        field { sw = rw; hw = r; reset = 0x0; } value[2:0];
+        field { sw = r;  hw = r; reset = 0x0; } reserved[31:3];
+    } threshold_0 @ 0x200000;
+
+    reg {
+        riscv_intr_plic_role = "claim";
+        field { sw = r; hw = w; reset = 0x0; } value[3:0];
+        field { sw = r; hw = r; reset = 0x0; } reserved[31:4];
+    } claim_0 @ 0x200004;
+
+    reg {
+        riscv_intr_plic_role = "threshold";
+        field { sw = rw; hw = r; reset = 0x0; } value[2:0];
+        field { sw = r;  hw = r; reset = 0x0; } reserved[31:3];
+    } threshold_1 @ 0x201000;
+
+    reg {
+        riscv_intr_plic_role = "claim";
+        field { sw = r; hw = w; reset = 0x0; } value[3:0];
+        field { sw = r; hw = r; reset = 0x0; } reserved[31:4];
+    } claim_1 @ 0x201004;
+};
