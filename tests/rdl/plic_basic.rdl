@@ -7,20 +7,24 @@
 //   0x1000           pending         — bitmap, bit i = source i pending
 //   0x2000           enable          — bitmap, bit i = source i enabled
 //   0x200000         threshold       — only priority > threshold fires
-//   0x200004         claim           — read-only: highest-priority pending
-//                                       source ID (0 = none)
+//   0x200004         claim_complete  — read → claim (returns winner ID,
+//                                       marks that source "in service");
+//                                      write → complete (clears the
+//                                       in-service bit for the written ID).
 //
-// v1 scope:
+// v2 scope:
 //   * N = 8 sources (bit 0 unused, bits [8:1] carry real sources).
-//   * 1 M-mode context — drives one output wire (→ mip.meip).
+//   * 1 M-mode context — drives one bit of `intr_out` (→ mip.meip).
 //   * Level-triggered. The logic module passes `source_in` into the
-//     pending register each cycle; no edge detection, no claim latch.
-//   * Read-only claim. No complete handshake — the external source must
-//     drop for the pending bit to fall. Good enough for uart-class
-//     peripherals that keep IRQ asserted until SW reads the RX fifo.
+//     pending register each cycle; no edge detection.
+//   * Spec-compliant claim / complete. Reading the claim reg latches an
+//     "in-service" bit that masks the source from further arbitration
+//     on this context; writing the ID to the same reg releases it.
+//     Built on the upstream rdl2arch `emit_read_pulse` /
+//     `emit_write_pulse` UDPs so the logic module sees a 1-cycle pulse
+//     on each SW access.
 //
-// Multi-context, full claim/complete, edge detection, and S-mode
-// delegation are scoped to follow-up phases.
+// Edge detection and S-mode delegation are scoped to follow-up phases.
 
 addrmap plic {
     reg {
@@ -47,9 +51,15 @@ addrmap plic {
         field { sw = r;  hw = r; reset = 0x0; } reserved[31:3];
     } threshold_0 @ 0x200000;
 
+    // Combined claim / complete register. Read returns the current
+    // winner ID (HW drives it each cycle via hwif_in); write deposits
+    // the complete ID into storage for one cycle so the logic module
+    // can latch it. Both sides need to write storage, hence sw=rw; hw=rw.
     reg {
         riscv_intr_plic_role = "claim";
-        field { sw = r; hw = w; reset = 0x0; } value[3:0];
-        field { sw = r; hw = r; reset = 0x0; } reserved[31:4];
+        emit_read_pulse  = true;
+        emit_write_pulse = true;
+        field { sw = rw; hw = rw; reset = 0x0; } value[3:0];
+        field { sw = r;  hw = r;  reset = 0x0; } reserved[31:4];
     } claim_0 @ 0x200004;
 };

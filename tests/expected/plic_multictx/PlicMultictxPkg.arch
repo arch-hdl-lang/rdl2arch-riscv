@@ -91,9 +91,11 @@ package PlicMultictxPkg
     enable_1_reserved: UInt<23>;
     threshold_0_value: UInt<3>;
     threshold_0_reserved: UInt<29>;
+    claim_0_value: UInt<4>;
     claim_0_reserved: UInt<28>;
     threshold_1_value: UInt<3>;
     threshold_1_reserved: UInt<29>;
+    claim_1_value: UInt<4>;
     claim_1_reserved: UInt<28>;
   end struct PlicMultictxHwifOut
 

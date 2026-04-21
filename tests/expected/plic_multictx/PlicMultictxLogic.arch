@@ -7,16 +7,27 @@ module PlicMultictxLogic
   port hwif_out:  in  PlicMultictxHwifOut;
   port hwif_in:   out PlicMultictxHwifIn;
   port intr_out:  out UInt<2>;
+  port claim_0_read_pulse:  in Bool;
+  port claim_0_write_pulse: in Bool;
+  port claim_1_read_pulse:  in Bool;
+  port claim_1_write_pulse: in Bool;
+
+  default seq on clk rising;
+
+  reg c0_claimed_r: UInt<9> reset rst => 9'h000;
+  reg c0_wr_pulse_d: Bool reset rst => false;
+  reg c1_claimed_r: UInt<9> reset rst => 9'h000;
+  reg c1_wr_pulse_d: Bool reset rst => false;
 
   // ── context 0 ──
-  let c0_cand_1: Bool = source_in[1] and hwif_out.enable_0_value[1] and (hwif_out.priority_1_value > hwif_out.threshold_0_value);
-  let c0_cand_2: Bool = source_in[2] and hwif_out.enable_0_value[2] and (hwif_out.priority_2_value > hwif_out.threshold_0_value);
-  let c0_cand_3: Bool = source_in[3] and hwif_out.enable_0_value[3] and (hwif_out.priority_3_value > hwif_out.threshold_0_value);
-  let c0_cand_4: Bool = source_in[4] and hwif_out.enable_0_value[4] and (hwif_out.priority_4_value > hwif_out.threshold_0_value);
-  let c0_cand_5: Bool = source_in[5] and hwif_out.enable_0_value[5] and (hwif_out.priority_5_value > hwif_out.threshold_0_value);
-  let c0_cand_6: Bool = source_in[6] and hwif_out.enable_0_value[6] and (hwif_out.priority_6_value > hwif_out.threshold_0_value);
-  let c0_cand_7: Bool = source_in[7] and hwif_out.enable_0_value[7] and (hwif_out.priority_7_value > hwif_out.threshold_0_value);
-  let c0_cand_8: Bool = source_in[8] and hwif_out.enable_0_value[8] and (hwif_out.priority_8_value > hwif_out.threshold_0_value);
+  let c0_cand_1: Bool = source_in[1] and hwif_out.enable_0_value[1] and (hwif_out.priority_1_value > hwif_out.threshold_0_value) and (c0_claimed_r[1] == 1'b0);
+  let c0_cand_2: Bool = source_in[2] and hwif_out.enable_0_value[2] and (hwif_out.priority_2_value > hwif_out.threshold_0_value) and (c0_claimed_r[2] == 1'b0);
+  let c0_cand_3: Bool = source_in[3] and hwif_out.enable_0_value[3] and (hwif_out.priority_3_value > hwif_out.threshold_0_value) and (c0_claimed_r[3] == 1'b0);
+  let c0_cand_4: Bool = source_in[4] and hwif_out.enable_0_value[4] and (hwif_out.priority_4_value > hwif_out.threshold_0_value) and (c0_claimed_r[4] == 1'b0);
+  let c0_cand_5: Bool = source_in[5] and hwif_out.enable_0_value[5] and (hwif_out.priority_5_value > hwif_out.threshold_0_value) and (c0_claimed_r[5] == 1'b0);
+  let c0_cand_6: Bool = source_in[6] and hwif_out.enable_0_value[6] and (hwif_out.priority_6_value > hwif_out.threshold_0_value) and (c0_claimed_r[6] == 1'b0);
+  let c0_cand_7: Bool = source_in[7] and hwif_out.enable_0_value[7] and (hwif_out.priority_7_value > hwif_out.threshold_0_value) and (c0_claimed_r[7] == 1'b0);
+  let c0_cand_8: Bool = source_in[8] and hwif_out.enable_0_value[8] and (hwif_out.priority_8_value > hwif_out.threshold_0_value) and (c0_claimed_r[8] == 1'b0);
   let c0_w1_id:   UInt<4> = c0_cand_1 ? 4'h1 : 4'h0;
   let c0_w1_prio: UInt<3> = c0_cand_1 ? hwif_out.priority_1_value : 3'h0;
   let c0_w2_take: Bool = c0_cand_2 and (c0_w1_id == 4'h0 or hwif_out.priority_2_value > c0_w1_prio);
@@ -40,16 +51,40 @@ module PlicMultictxLogic
   let c0_w8_take: Bool = c0_cand_8 and (c0_w7_id == 4'h0 or hwif_out.priority_8_value > c0_w7_prio);
   let c0_w8_id:   UInt<4> = c0_w8_take ? 4'h8 : c0_w7_id;
   let c0_w8_prio: UInt<3> = c0_w8_take ? hwif_out.priority_8_value : c0_w7_prio;
+  let c0_set_bit: UInt<9> = match hwif_out.claim_0_value
+    4'h1 => 9'h002,
+    4'h2 => 9'h004,
+    4'h3 => 9'h008,
+    4'h4 => 9'h010,
+    4'h5 => 9'h020,
+    4'h6 => 9'h040,
+    4'h7 => 9'h080,
+    4'h8 => 9'h100,
+    _    => 9'h000
+  end match;
+  let c0_set_mask: UInt<9> = claim_0_read_pulse ? c0_set_bit : 9'h000;
+  let c0_clr_bit: UInt<9> = match hwif_out.claim_0_value
+    4'h1 => 9'h002,
+    4'h2 => 9'h004,
+    4'h3 => 9'h008,
+    4'h4 => 9'h010,
+    4'h5 => 9'h020,
+    4'h6 => 9'h040,
+    4'h7 => 9'h080,
+    4'h8 => 9'h100,
+    _    => 9'h000
+  end match;
+  let c0_clr_mask: UInt<9> = c0_wr_pulse_d ? c0_clr_bit : 9'h000;
 
   // ── context 1 ──
-  let c1_cand_1: Bool = source_in[1] and hwif_out.enable_1_value[1] and (hwif_out.priority_1_value > hwif_out.threshold_1_value);
-  let c1_cand_2: Bool = source_in[2] and hwif_out.enable_1_value[2] and (hwif_out.priority_2_value > hwif_out.threshold_1_value);
-  let c1_cand_3: Bool = source_in[3] and hwif_out.enable_1_value[3] and (hwif_out.priority_3_value > hwif_out.threshold_1_value);
-  let c1_cand_4: Bool = source_in[4] and hwif_out.enable_1_value[4] and (hwif_out.priority_4_value > hwif_out.threshold_1_value);
-  let c1_cand_5: Bool = source_in[5] and hwif_out.enable_1_value[5] and (hwif_out.priority_5_value > hwif_out.threshold_1_value);
-  let c1_cand_6: Bool = source_in[6] and hwif_out.enable_1_value[6] and (hwif_out.priority_6_value > hwif_out.threshold_1_value);
-  let c1_cand_7: Bool = source_in[7] and hwif_out.enable_1_value[7] and (hwif_out.priority_7_value > hwif_out.threshold_1_value);
-  let c1_cand_8: Bool = source_in[8] and hwif_out.enable_1_value[8] and (hwif_out.priority_8_value > hwif_out.threshold_1_value);
+  let c1_cand_1: Bool = source_in[1] and hwif_out.enable_1_value[1] and (hwif_out.priority_1_value > hwif_out.threshold_1_value) and (c1_claimed_r[1] == 1'b0);
+  let c1_cand_2: Bool = source_in[2] and hwif_out.enable_1_value[2] and (hwif_out.priority_2_value > hwif_out.threshold_1_value) and (c1_claimed_r[2] == 1'b0);
+  let c1_cand_3: Bool = source_in[3] and hwif_out.enable_1_value[3] and (hwif_out.priority_3_value > hwif_out.threshold_1_value) and (c1_claimed_r[3] == 1'b0);
+  let c1_cand_4: Bool = source_in[4] and hwif_out.enable_1_value[4] and (hwif_out.priority_4_value > hwif_out.threshold_1_value) and (c1_claimed_r[4] == 1'b0);
+  let c1_cand_5: Bool = source_in[5] and hwif_out.enable_1_value[5] and (hwif_out.priority_5_value > hwif_out.threshold_1_value) and (c1_claimed_r[5] == 1'b0);
+  let c1_cand_6: Bool = source_in[6] and hwif_out.enable_1_value[6] and (hwif_out.priority_6_value > hwif_out.threshold_1_value) and (c1_claimed_r[6] == 1'b0);
+  let c1_cand_7: Bool = source_in[7] and hwif_out.enable_1_value[7] and (hwif_out.priority_7_value > hwif_out.threshold_1_value) and (c1_claimed_r[7] == 1'b0);
+  let c1_cand_8: Bool = source_in[8] and hwif_out.enable_1_value[8] and (hwif_out.priority_8_value > hwif_out.threshold_1_value) and (c1_claimed_r[8] == 1'b0);
   let c1_w1_id:   UInt<4> = c1_cand_1 ? 4'h1 : 4'h0;
   let c1_w1_prio: UInt<3> = c1_cand_1 ? hwif_out.priority_1_value : 3'h0;
   let c1_w2_take: Bool = c1_cand_2 and (c1_w1_id == 4'h0 or hwif_out.priority_2_value > c1_w1_prio);
@@ -73,6 +108,37 @@ module PlicMultictxLogic
   let c1_w8_take: Bool = c1_cand_8 and (c1_w7_id == 4'h0 or hwif_out.priority_8_value > c1_w7_prio);
   let c1_w8_id:   UInt<4> = c1_w8_take ? 4'h8 : c1_w7_id;
   let c1_w8_prio: UInt<3> = c1_w8_take ? hwif_out.priority_8_value : c1_w7_prio;
+  let c1_set_bit: UInt<9> = match hwif_out.claim_1_value
+    4'h1 => 9'h002,
+    4'h2 => 9'h004,
+    4'h3 => 9'h008,
+    4'h4 => 9'h010,
+    4'h5 => 9'h020,
+    4'h6 => 9'h040,
+    4'h7 => 9'h080,
+    4'h8 => 9'h100,
+    _    => 9'h000
+  end match;
+  let c1_set_mask: UInt<9> = claim_1_read_pulse ? c1_set_bit : 9'h000;
+  let c1_clr_bit: UInt<9> = match hwif_out.claim_1_value
+    4'h1 => 9'h002,
+    4'h2 => 9'h004,
+    4'h3 => 9'h008,
+    4'h4 => 9'h010,
+    4'h5 => 9'h020,
+    4'h6 => 9'h040,
+    4'h7 => 9'h080,
+    4'h8 => 9'h100,
+    _    => 9'h000
+  end match;
+  let c1_clr_mask: UInt<9> = c1_wr_pulse_d ? c1_clr_bit : 9'h000;
+
+  seq
+    c0_wr_pulse_d <= claim_0_write_pulse;
+    c0_claimed_r <= (c0_claimed_r | c0_set_mask) & (~c0_clr_mask);
+    c1_wr_pulse_d <= claim_1_write_pulse;
+    c1_claimed_r <= (c1_claimed_r | c1_set_mask) & (~c1_clr_mask);
+  end seq
 
   comb
     hwif_in.pending_value = source_in;
