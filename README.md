@@ -19,6 +19,10 @@ later phase).
   - ✅ Phase 5.2 — PLIC generator (`RiscvPlicExporter` emits the MMIO register block + priority-arbitration logic module). Level-triggered sources.
   - ✅ Phase 5.2a — Multi-context PLIC. Arbiter replicates per context; output is a `UInt<N_contexts>` bitmap. Fixtures shipped: `plic_basic` (1 context), `plic_multictx` (2 contexts: M + S).
   - ✅ Phase 5.2b — Spec-compliant claim / complete. Per-context in-service bitmap: a SW **read** of the claim reg latches the returned source as in-service (masks it from further arbitration on this context); a SW **write** clears the matching bit. Consumes upstream `emit_read_pulse` / `emit_write_pulse` UDPs so no side-channel is needed. Edge detection remains a follow-up.
+- 🚧 Phase 6 — CPU integration (lowRISC Ibex + our CLINT/PLIC as a SoC).
+  - ✅ Phase 6.1 — SoC scaffold: `ibex_mini_soc.sv` (top), `obi_to_axi_lite.sv` (single-transaction OBI↔AXI4-Lite bridge), memory map for RAM + simulator_ctrl + CLINT + PLIC. Verilator `--lint-only` passes — generated HDL composes with a real RV32IMC core. See `tests/cpu/`.
+  - 🚧 Phase 6.2 — Timer-ISR hand-written program + cocotb testbench proving the full interrupt loop (`mtvec` → CLINT `mtimecmp` → trap → `mcause` check → `mret`).
+  - 🚧 Phase 6.3 — Software-interrupt (`msip`) and external-interrupt (PLIC source + claim/complete from the ISR) variants.
 
 ## Install
 
