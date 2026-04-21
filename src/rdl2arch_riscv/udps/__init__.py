@@ -20,6 +20,7 @@ from .wpri import RiscvWpri
 from .trap_signal import RiscvTrapSignal
 from .trap_lifecycle import RiscvSaveOnTrap, RiscvRestoreOnRet
 from .clint import RiscvIntrClintRole
+from .plic import RiscvIntrPlicRole
 
 ALL_UDPS = [
     RiscvCsrAddr,
@@ -30,6 +31,7 @@ ALL_UDPS = [
     RiscvSaveOnTrap,
     RiscvRestoreOnRet,
     RiscvIntrClintRole,
+    RiscvIntrPlicRole,
 ]
 
 __all__ = ["ALL_UDPS"] + [c.__name__ for c in ALL_UDPS]

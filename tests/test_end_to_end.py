@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 from systemrdl import RDLCompiler
 
-from rdl2arch_riscv import RiscvClintExporter, RiscvCsrExporter
+from rdl2arch_riscv import RiscvClintExporter, RiscvCsrExporter, RiscvPlicExporter
 from rdl2arch_riscv.udps import ALL_UDPS
 
-from conftest import clint_fixtures, rdl_fixtures, run_arch
+from conftest import clint_fixtures, plic_fixtures, rdl_fixtures, run_arch
 
 
 def _compile(rdl_file: Path):
@@ -50,4 +50,14 @@ def test_clint_arch_build(rdl_file: Path, arch_bin: str, tmp_path: Path) -> None
     out_dir.mkdir()
     files = RiscvClintExporter().export(root.top, str(out_dir))
     assert files, "clint exporter produced no files"
+    _arch_check_and_build(arch_bin, out_dir)
+
+
+@pytest.mark.parametrize("rdl_file", plic_fixtures(), ids=lambda p: p.stem)
+def test_plic_arch_build(rdl_file: Path, arch_bin: str, tmp_path: Path) -> None:
+    root = _compile(rdl_file)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    files = RiscvPlicExporter().export(root.top, str(out_dir))
+    assert files, "plic exporter produced no files"
     _arch_check_and_build(arch_bin, out_dir)

@@ -1,0 +1,76 @@
+package PlicPkg
+
+  enum PlicCsr
+    Priority0,
+    Priority1,
+    Priority2,
+    Priority3,
+    Priority4,
+    Priority5,
+    Priority6,
+    Priority7,
+    Priority8,
+    Pending,
+    Enable0,
+    Threshold0,
+    Claim0
+  end enum PlicCsr
+
+  struct PriorityReg
+    value: UInt<3>;
+    reserved: UInt<29>;
+  end struct PriorityReg
+
+  struct PendingReg
+    value: UInt<9>;
+    reserved: UInt<23>;
+  end struct PendingReg
+
+  struct Enable0Reg
+    value: UInt<9>;
+    reserved: UInt<23>;
+  end struct Enable0Reg
+
+  struct Threshold0Reg
+    value: UInt<3>;
+    reserved: UInt<29>;
+  end struct Threshold0Reg
+
+  struct Claim0Reg
+    value: UInt<4>;
+    reserved: UInt<28>;
+  end struct Claim0Reg
+
+  struct PlicHwifIn
+    pending_value: UInt<9>;
+    claim_0_value: UInt<4>;
+  end struct PlicHwifIn
+
+  struct PlicHwifOut
+    priority_0_value: UInt<3>;
+    priority_0_reserved: UInt<29>;
+    priority_1_value: UInt<3>;
+    priority_1_reserved: UInt<29>;
+    priority_2_value: UInt<3>;
+    priority_2_reserved: UInt<29>;
+    priority_3_value: UInt<3>;
+    priority_3_reserved: UInt<29>;
+    priority_4_value: UInt<3>;
+    priority_4_reserved: UInt<29>;
+    priority_5_value: UInt<3>;
+    priority_5_reserved: UInt<29>;
+    priority_6_value: UInt<3>;
+    priority_6_reserved: UInt<29>;
+    priority_7_value: UInt<3>;
+    priority_7_reserved: UInt<29>;
+    priority_8_value: UInt<3>;
+    priority_8_reserved: UInt<29>;
+    pending_reserved: UInt<23>;
+    enable_0_value: UInt<9>;
+    enable_0_reserved: UInt<23>;
+    threshold_0_value: UInt<3>;
+    threshold_0_reserved: UInt<29>;
+    claim_0_reserved: UInt<28>;
+  end struct PlicHwifOut
+
+end package PlicPkg

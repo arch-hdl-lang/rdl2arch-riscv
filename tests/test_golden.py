@@ -19,11 +19,11 @@ from pathlib import Path
 import pytest
 from systemrdl import RDLCompiler
 
-from rdl2arch_riscv import RiscvClintExporter, RiscvCsrExporter
+from rdl2arch_riscv import RiscvClintExporter, RiscvCsrExporter, RiscvPlicExporter
 from rdl2arch_riscv.scan_csrs import scan
 from rdl2arch_riscv.udps import ALL_UDPS
 
-from conftest import clint_fixtures, rdl_fixtures
+from conftest import clint_fixtures, plic_fixtures, rdl_fixtures
 from sim.integrated_top import emit_integrated_top, integrated_top_name
 
 
@@ -58,6 +58,12 @@ def _generate_clint(rdl_file: Path, out_dir: Path) -> dict[str, str]:
     Logic module (from rdl2arch-riscv)."""
     root = _compile(rdl_file)
     RiscvClintExporter().export(root.top, str(out_dir))
+    return {p.name: p.read_text() for p in sorted(out_dir.glob("*.arch"))}
+
+
+def _generate_plic(rdl_file: Path, out_dir: Path) -> dict[str, str]:
+    root = _compile(rdl_file)
+    RiscvPlicExporter().export(root.top, str(out_dir))
     return {p.name: p.read_text() for p in sorted(out_dir.glob("*.arch"))}
 
 
@@ -100,3 +106,8 @@ def test_csr_golden(rdl_file: Path, tmp_path: Path) -> None:
 @pytest.mark.parametrize("rdl_file", clint_fixtures(), ids=lambda p: p.stem)
 def test_clint_golden(rdl_file: Path, tmp_path: Path) -> None:
     _run_golden(rdl_file, tmp_path, _generate_clint)
+
+
+@pytest.mark.parametrize("rdl_file", plic_fixtures(), ids=lambda p: p.stem)
+def test_plic_golden(rdl_file: Path, tmp_path: Path) -> None:
+    _run_golden(rdl_file, tmp_path, _generate_plic)
