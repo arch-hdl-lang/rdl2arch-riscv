@@ -22,7 +22,7 @@ later phase).
 - 🚧 Phase 6 — CPU integration (lowRISC Ibex + our CLINT/PLIC as a SoC).
   - ✅ Phase 6.1 — SoC scaffold: `ibex_mini_soc.sv` (top), `obi_to_axi_lite.sv` (single-transaction OBI↔AXI4-Lite bridge), memory map for RAM + simulator_ctrl + CLINT + PLIC. Verilator `--lint-only` passes — generated HDL composes with a real RV32IMC core. See `tests/cpu/`.
   - ✅ Phase 6.2 — Timer-ISR end-to-end. Hand-written RV32 program (`tests/cpu/sw/timer_isr.S`) sets up `mtvec` + `mie.MTIE` + CLINT `mtimecmp` + `mstatus.MIE`, busy-waits; cocotb testbench releases reset, waits for the program to hit a completion sentinel in RAM, and asserts `mcause == 0x80000007` (M-timer interrupt bit), `mip.MTIP == 1` at trap entry, and `mepc` inside the busy-wait loop. Drives the full path: `ClintLogic.mtip_out` → `ibex.irq_timer_i` → trap → vector table → handler → `mret`.
-  - 🚧 Phase 6.3 — Software-interrupt (`msip`) and external-interrupt (PLIC source + claim/complete from the ISR) variants.
+  - ✅ Phase 6.3 — Software-interrupt (`sw_isr.S`) and external-interrupt (`ext_isr.S`) variants. The external test is the most interesting: it drives `ext_irq_sources_i[2]` from cocotb after the program writes a `ready_for_irq` sentinel, the PLIC winner-ID is read by the handler (auto-claiming on our PLIC), the claim-id is written back to complete — proving the claim/complete handshake works from a real RISC-V ISR on top of the register block's `emit_read_pulse`/`emit_write_pulse` wiring.
 
 ## Install
 

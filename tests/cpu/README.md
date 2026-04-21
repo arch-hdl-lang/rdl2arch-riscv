@@ -11,8 +11,8 @@ matches the RISC-V privileged spec.
 | Phase | What it proves | Test |
 |------:|---|---|
 | 6.1 | The combined HDL elaborates and type-checks under Verilator. Port widths, hwif struct fields, bus directions all agree. | `test_soc_lint.py` |
-| 6.2 | A hand-written RV32 timer-ISR program runs end-to-end on Ibex + our CLINT. Sets `mtvec`, `mie.MTIE`, `mtimecmp`, `mstatus.MIE`; busy-waits; traps into the vector table; handler stashes `mcause` / `mepc` / `mip`; returns via `mret`; asserts `mcause == 0x8000_0007`. | `test_timer_isr.py` |
-| 6.3 | Software (`msip`) and external (PLIC source + claim/complete from the ISR) interrupts handled the same way. | *planned* |
+| 6.2 | A hand-written RV32 timer-ISR program runs end-to-end on Ibex + our CLINT. Sets `mtvec`, `mie.MTIE`, `mtimecmp`, `mstatus.MIE`; busy-waits; traps into the vector table; handler stashes `mcause` / `mepc` / `mip`; returns via `mret`; asserts `mcause == 0x8000_0007`. | `test_cpu_programs.py[timer_isr]` |
+| 6.3 | Two more programs under the same harness: `sw_isr.S` (CLINT `msip` → `mip.MSIP`, handler acks by writing zero) and `ext_isr.S` (external source via `ext_irq_sources_i[2]` → PLIC arbitration → `mip.MEIP`, handler does claim-read + complete-write against `PLIC.claim_0`). | `test_cpu_programs.py[sw_isr]`, `[ext_isr]` |
 
 ## Layout
 
