@@ -1,13 +1,16 @@
 """Build-once, reuse-many pybind harness for rdl2arch-riscv sim tests.
 
 The riscv exporter emits four `.arch` files (package + CSR file + access
-controller + trap coordinator). Each sim build targets one module: the
-package is always included so struct types resolve, plus the specific
-module `.arch` file under test.
+controller + trap coordinator), plus this tests module generates an
+integrated-top `.arch` that wires them together. `arch sim --pybind`
+(arch >= v0.44, see arch-com PR #40) compiles every module's pybind
+wrapper into the same physical `.so` and symlinks the remaining
+`V<Module>_pybind` names to it, so a single invocation produces all
+four loadable modules.
 
-The arch `--pybind` flow only binds struct types a module actually
-references (see arch-com PR #32), so module-isolated builds Just Work
-as long as the package is passed alongside.
+`build_all_sim` runs that single invocation and returns a
+`{target: so_path}` dict. `build_sim` is a thin wrapper kept for
+callers that only want one target.
 """
 
 from __future__ import annotations
@@ -41,70 +44,68 @@ def _compile_rdl(rdl_path: Path):
     return rdlc.elaborate()
 
 
-def _run_pybind(arch_bin: str, build_dir: Path, inputs: list[Path],
-                target: str) -> None:
+def build_all_sim(rdl_path: Path, out_dir: Path, arch_bin: str) -> dict[str, str]:
+    """Build every pybind target for `rdl_path` in a single invocation.
+
+    Returns a `{target: so_path}` dict with keys:
+      * `csr_file`, `access`, `trap_coord`  — one per emitted module
+      * `integrated`                        — the test-only wrapper top
+
+    The emitter output and the generated integrated top are written under
+    `out_dir`; the compiled `.so` files land in `out_dir/sim`.
+    """
+    root = _compile_rdl(rdl_path)
+    RiscvCsrExporter().export(root.top, str(out_dir))
+
+    design = scan(root.top, xlen=32)
+    top_name = integrated_top_name(design)
+    (out_dir / f"{top_name}.arch").write_text(emit_integrated_top(design))
+
+    build_dir = out_dir / "sim"
+    arch_files = sorted(out_dir.glob("*.arch"))
     result = subprocess.run(
         [arch_bin, "sim", "--pybind", "-o", str(build_dir),
-         *[str(p) for p in inputs]],
+         *[str(p) for p in arch_files]],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"arch sim --pybind failed for target={target}:\n"
+            "arch sim --pybind failed:\n"
             f"STDERR:\n{result.stderr}\nSTDOUT:\n{result.stdout}"
         )
 
+    # Map each target to its pybind .so. Module names follow
+    # `V<Base><Suffix>_pybind` for the emitter's three modules and
+    # `V<integrated_top_name>_pybind` for the test wrapper.
+    base = design.module_name[: -len("CsrFile")]
+    target_module_names = {
+        "csr_file":   f"{base}CsrFile",
+        "access":     f"{base}CsrAccess",
+        "trap_coord": f"{base}CsrTrapCoord",
+        "integrated": top_name,
+    }
+    out: dict[str, str] = {}
+    for target, mod_name in target_module_names.items():
+        wanted = f"V{mod_name}_pybind"
+        matches = [p for p in build_dir.glob(f"{wanted}.*.so")]
+        if not matches:
+            raise RuntimeError(
+                f"no pybind .so for target={target} (expected {wanted}) in {build_dir}"
+            )
+        # If there's both a real file and a symlink, pick either — they
+        # resolve to the same shared library.
+        out[target] = str(matches[0])
+    return out
+
 
 def build_sim(rdl_path: Path, target: str, out_dir: Path, arch_bin: str) -> str:
-    """Emit ARCH, build `arch sim --pybind` for one target, return the .so path.
-
-    `target` must be one of `csr_file`, `access`, `trap_coord`, or
-    `integrated`. The `integrated` target wires all three modules together
-    via a generated test-only top — see `sim/integrated_top.py`.
-    """
+    """Backward-compatible single-target variant of `build_all_sim`."""
     if target not in MODULE_SUFFIXES and target != "integrated":
         raise ValueError(
             f"target must be one of {list(MODULE_SUFFIXES) + ['integrated']}; "
             f"got {target!r}"
         )
-
-    root = _compile_rdl(rdl_path)
-    RiscvCsrExporter().export(root.top, str(out_dir))
-
-    pkg_files = sorted(out_dir.glob("*Pkg.arch"))
-    if len(pkg_files) != 1:
-        raise RuntimeError(f"expected one package .arch, got {pkg_files}")
-
-    if target == "integrated":
-        design = scan(root.top, xlen=32)
-        top_src = emit_integrated_top(design)
-        top_name = integrated_top_name(design)
-        top_file = out_dir / f"{top_name}.arch"
-        top_file.write_text(top_src)
-        build_dir = out_dir / "sim_integrated"
-        _run_pybind(arch_bin, build_dir, sorted(out_dir.glob("*.arch")), target)
-        wanted = f"V{top_name}_pybind"
-        matching = [p for p in build_dir.glob("V*_pybind.*.so")
-                    if p.name.startswith(wanted)]
-        if not matching:
-            raise RuntimeError(
-                f"integrated-top .so {wanted} not found in {build_dir}"
-            )
-        return str(matching[0])
-
-    suffix = MODULE_SUFFIXES[target]
-    mod_files = sorted(p for p in out_dir.glob(f"*{suffix}.arch")
-                       if not p.name.endswith("Pkg.arch"))
-    if len(mod_files) != 1:
-        raise RuntimeError(
-            f"expected exactly one {suffix} module, got {mod_files}"
-        )
-    build_dir = out_dir / f"sim_{target}"
-    _run_pybind(arch_bin, build_dir, [pkg_files[0], mod_files[0]], target)
-    so_files = list(build_dir.glob("V*_pybind.*.so"))
-    if not so_files:
-        raise RuntimeError(f"No pybind .so in {build_dir}")
-    return str(so_files[0])
+    return build_all_sim(rdl_path, out_dir, arch_bin)[target]
 
 
 def fresh_dut(so_path: str):

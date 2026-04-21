@@ -37,6 +37,32 @@ def rdl_fixtures() -> list[Path]:
     return sorted(RDL_DIR.glob("*.rdl"))
 
 
+@pytest.fixture(scope="session")
+def mtrap_sim_build(arch_bin, tmp_path_factory) -> dict[str, str]:
+    """Build all pybind targets from mtrap_subset.rdl once per session.
+
+    Shared across test_csr_file.py, test_access_controller.py (mtrap arm),
+    test_trap_coordinator.py, and test_integration.py — each picks its
+    `.so` by target name from the returned dict. This relies on
+    arch-com PR #40 emitting one `.so` per module from a single
+    `arch sim --pybind` invocation.
+    """
+    pytest.importorskip("pybind11")
+    from sim.harness import build_all_sim
+    out = tmp_path_factory.mktemp("mtrap_sim")
+    return build_all_sim(RDL_DIR / "mtrap_subset.rdl", out, arch_bin)
+
+
+@pytest.fixture(scope="session")
+def override_sim_build(arch_bin, tmp_path_factory) -> dict[str, str]:
+    """Same idea for priv_override.rdl — only test_access_controller.py
+    consumes this one currently."""
+    pytest.importorskip("pybind11")
+    from sim.harness import build_all_sim
+    out = tmp_path_factory.mktemp("override_sim")
+    return build_all_sim(RDL_DIR / "priv_override.rdl", out, arch_bin)
+
+
 def run_arch(arch_bin: str, cmd: str, files: list[Path], cwd: Path
              ) -> subprocess.CompletedProcess:
     return subprocess.run(

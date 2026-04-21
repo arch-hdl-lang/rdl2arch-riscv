@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import RDL_DIR
-from sim.harness import build_sim, fresh_dut
+from sim.harness import fresh_dut
 
 
 pytest.importorskip("pybind11")
@@ -37,26 +36,16 @@ def _access(dut, *, addr: int, opcode: int, priv: int, valid: bool = True) -> tu
 
 
 @pytest.fixture(scope="module")
-def mtrap_access(arch_bin, tmp_path_factory):
+def mtrap_access(mtrap_sim_build) -> str:
     # mtrap_subset has no per-reg priv overrides — only the default
     # `riscv_priv = "m"` at the addrmap level, which doesn't trigger an
     # override arm. Exercises the csr_addr[9:8] default path.
-    return build_sim(
-        RDL_DIR / "mtrap_subset.rdl",
-        target="access",
-        out_dir=tmp_path_factory.mktemp("access_mtrap"),
-        arch_bin=arch_bin,
-    )
+    return mtrap_sim_build["access"]
 
 
 @pytest.fixture(scope="module")
-def override_access(arch_bin, tmp_path_factory):
-    return build_sim(
-        RDL_DIR / "priv_override.rdl",
-        target="access",
-        out_dir=tmp_path_factory.mktemp("access_override"),
-        arch_bin=arch_bin,
-    )
+def override_access(override_sim_build) -> str:
+    return override_sim_build["access"]
 
 
 # ── csr_addr[9:8] default priv path (mtrap_subset, no overrides) ────────────
