@@ -5,9 +5,13 @@ the CSR file — each as its own pybind DUT, then cross-wires them in
 Python to prove the output-to-input names line up for an actual
 system-level hookup:
 
-    ClintLogic.msip_out   →   CsrFile.hwif_in.mip_msip
-    ClintLogic.mtip_out   →   CsrFile.hwif_in.mip_mtip
-    PlicLogic.meip_out    →   CsrFile.hwif_in.mip_meip
+    ClintLogic.msip_out        →   CsrFile.hwif_in.mip_msip
+    ClintLogic.mtip_out        →   CsrFile.hwif_in.mip_mtip
+    PlicLogic.intr_out[0]      →   CsrFile.hwif_in.mip_meip
+
+The PLIC's `intr_out` is a UInt<N_contexts> bitmap; bit 0 is context 0
+(M-mode), so for the single-context `plic_basic` fixture we mask `& 1`
+before handing it to the CSR file.
 
 Each test drives an external stimulus (SW write to a CLINT/PLIC register
 via its hwif_out, or an external `source_in` line to the PLIC) and then
@@ -111,7 +115,9 @@ def _tick_with_wiring(csr, clint, plic) -> None:
     plic.eval_comb()
     csr.hwif_in.mip_msip = clint.msip_out
     csr.hwif_in.mip_mtip = clint.mtip_out
-    csr.hwif_in.mip_meip = plic.meip_out
+    # plic.intr_out is a UInt<N_contexts> bitmap; plic_basic has one
+    # context, so bit 0 is the M-mode external-interrupt line.
+    csr.hwif_in.mip_meip = int(plic.intr_out) & 1
     tick(csr)
 
 
@@ -158,7 +164,7 @@ def test_clint_timer_reaches_csr_mip(mtrap_sim_build, _build_aux_sim) -> None:
 
 
 def test_plic_external_source_reaches_csr_mip(mtrap_sim_build, _build_aux_sim) -> None:
-    """External source line → PLIC arbitration → meip_out → mip[11]."""
+    """External source line → PLIC arbitration → intr_out[0] → mip[11]."""
     csr, clint, plic = _make_system(mtrap_sim_build, _build_aux_sim)
     drv = CsrPipelineDriver(csr)
 
