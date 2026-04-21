@@ -13,6 +13,7 @@ module PrivOverrideRiscvTop
   port csr_opcode: in  UInt<3>;
   port cur_priv:   in  UInt<2>;
   port trap_enter: in  Bool;
+  port xret_enter: in  Bool;
 
   port granted:    out Bool;
   port illegal:    out Bool;
@@ -53,6 +54,7 @@ module PrivOverrideRiscvTop
   inst trap: PrivOverrideCsrTrapCoord
     clk <- clk; rst <- rst;
     trap_enter <- trap_enter;
+    xret_enter <- xret_enter;
     hwif_in_live  <- hwif_live_w;
     hwif_in_drive -> hwif_drive_w;
   end inst trap

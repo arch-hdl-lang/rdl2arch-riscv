@@ -47,7 +47,14 @@ addrmap m_trap_ibex {
         riscv_csr_addr = 0x300;
         field { sw = rw; hw = r;  reset = 0x0; riscv_wpri = true; } wpri_lo[0:0];
         field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_2_1[2:1];
-        field { sw = rw; hw = rw; reset = 0x0;                    } mie[3:3];
+        // mie: the live mstatus.MIE bit. HW-writable for two reasons —
+        // auto-clear on trap entry (`hwif_in_live` in the adapter) and
+        // restore on mret (`riscv_restore_on_ret` — the TrapCoord drives
+        // `hwif_in_drive.mstatus_mie ← restore_mstatus_mie` on
+        // `xret_enter`; the adapter sources that port from
+        // `hwif_out.mstatus_mpie`).
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_restore_on_ret = true; } mie[3:3];
         field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_6_4[6:4];
         field { sw = rw; hw = rw; reset = 0x0;
                 riscv_save_on_trap = true; riscv_restore_on_ret = true; } mpie[7:7];

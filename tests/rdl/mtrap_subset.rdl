@@ -29,7 +29,8 @@ addrmap m_trap_csrs {
         riscv_csr_addr = 0x300;
         field { sw = rw; hw = r;  reset = 0x0; riscv_wpri = true; } wpri_lo[0:0];
         field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_2_1[2:1];
-        field { sw = rw; hw = rw; reset = 0x0;                    } mie[3:3];
+        field { sw = rw; hw = rw; reset = 0x0;
+                riscv_restore_on_ret = true; } mie[3:3];
         field { sw = r;  hw = w;  reset = 0x0; riscv_wpri = true; } reserved_6_4[6:4];
         field { sw = rw; hw = rw; reset = 0x0;
                 riscv_save_on_trap = true; riscv_restore_on_ret = true; } mpie[7:7];

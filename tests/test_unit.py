@@ -177,8 +177,76 @@ def test_trap_coord_no_save_fields_still_compiles(tmp_path) -> None:
     # No save_on_trap fields, no save_ ports, no trap_enter mux.
     assert "save_" not in src
     assert "trap_enter ?" not in src
+    # xret_enter pulse is still declared (symmetric with trap_enter);
+    # it's unused when no fields carry `riscv_restore_on_ret`.
+    assert "port xret_enter: in Bool;" in src
+    assert "restore_" not in src
     # Still legal ARCH: the HwifIn has only `_reserved` in this case.
     assert "hwif_in_drive._reserved" in src
+
+
+def test_trap_coord_restore_on_ret_port_and_mux(tmp_path) -> None:
+    """`riscv_restore_on_ret` on a field makes the generator emit a
+    `restore_<reg>_<field>` input port and an `xret_enter ? restore_<m>
+    : …` mux on that member."""
+    from rdl2arch_riscv.emit_trap_coordinator import emit_trap_coordinator
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0x300;
+                // mie: restore-only (no save_on_trap) — mstatus.mie
+                // pattern. Gets written from a port on xret_enter;
+                // hwif_in_live carries the non-xret value (including
+                // the trap-entry auto-clear).
+                field { sw = rw; hw = rw; reset = 0;
+                        riscv_restore_on_ret = true; } mie[3:3];
+                field { sw = r; hw = w; reset = 0;
+                        riscv_wpri = true; } reserved_6_4[6:4];
+                // mpie: save AND restore — save on trap, restore on
+                // xret. Generator must emit both save_ and restore_
+                // ports AND a 3-way `trap_enter ? save : xret_enter
+                // ? restore : live` mux with trap having priority.
+                field { sw = rw; hw = rw; reset = 0;
+                        riscv_save_on_trap = true;
+                        riscv_restore_on_ret = true; } mpie[7:7];
+                field { sw = r; hw = w; reset = 0;
+                        riscv_wpri = true; } wpri_hi[31:8];
+            } mstatus @ 0x0;
+        };
+    """)
+    d = scan(top)
+    src = emit_trap_coordinator(d, "TCsrTrapCoord")
+
+    # Both pulse ports are declared (order: trap first, xret second).
+    assert "port trap_enter: in Bool;" in src
+    assert "port xret_enter: in Bool;" in src
+
+    # restore-only field → only xret mux, no save port for it.
+    assert "port restore_mstatus_mie: in UInt<1>;" in src
+    assert "save_mstatus_mie" not in src
+    assert (
+        "hwif_in_drive.mstatus_mie = "
+        "xret_enter ? restore_mstatus_mie : hwif_in_live.mstatus_mie"
+    ) in src
+
+    # save+restore field → 3-way priority mux, trap_enter wins over xret.
+    assert "port save_mstatus_mpie: in UInt<1>;" in src
+    assert "port restore_mstatus_mpie: in UInt<1>;" in src
+    assert (
+        "hwif_in_drive.mstatus_mpie = "
+        "trap_enter ? save_mstatus_mpie : "
+        "xret_enter ? restore_mstatus_mpie : "
+        "hwif_in_live.mstatus_mpie"
+    ) in src
+
+    # Untagged WPRI stays pure pass-through — no trap_enter / xret_enter.
+    assert (
+        "hwif_in_drive.mstatus_reserved_6_4 = hwif_in_live.mstatus_reserved_6_4"
+    ) in src
+    assert (
+        "hwif_in_drive.mstatus_wpri_hi = hwif_in_live.mstatus_wpri_hi"
+    ) in src
 
 
 def test_validate_rejects_save_on_trap_without_hw_writable(tmp_path) -> None:

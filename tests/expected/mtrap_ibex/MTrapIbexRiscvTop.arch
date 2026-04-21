@@ -13,11 +13,15 @@ module MTrapIbexRiscvTop
   port csr_opcode: in  UInt<3>;
   port cur_priv:   in  UInt<2>;
   port trap_enter: in  Bool;
+  port xret_enter: in  Bool;
   port save_mepc_epc: in UInt<32>;
   port save_mcause_cause: in UInt<32>;
   port save_mtval_tval: in UInt<32>;
   port save_mstatus_mpie: in UInt<1>;
   port save_mstatus_mpp: in UInt<2>;
+  port restore_mstatus_mie: in UInt<1>;
+  port restore_mstatus_mpie: in UInt<1>;
+  port restore_mstatus_mpp: in UInt<2>;
 
   port granted:    out Bool;
   port illegal:    out Bool;
@@ -84,11 +88,15 @@ module MTrapIbexRiscvTop
   inst trap: MTrapIbexCsrTrapCoord
     clk <- clk; rst <- rst;
     trap_enter <- trap_enter;
+    xret_enter <- xret_enter;
     save_mepc_epc <- save_mepc_epc;
     save_mcause_cause <- save_mcause_cause;
     save_mtval_tval <- save_mtval_tval;
     save_mstatus_mpie <- save_mstatus_mpie;
     save_mstatus_mpp <- save_mstatus_mpp;
+    restore_mstatus_mie <- restore_mstatus_mie;
+    restore_mstatus_mpie <- restore_mstatus_mpie;
+    restore_mstatus_mpp <- restore_mstatus_mpp;
     hwif_in_live  <- hwif_live_w;
     hwif_in_drive -> hwif_drive_w;
   end inst trap

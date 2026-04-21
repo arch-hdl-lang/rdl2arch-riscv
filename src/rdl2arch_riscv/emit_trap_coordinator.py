@@ -1,29 +1,40 @@
 """Emit the trap-coordinator ARCH module (Module 3 of the plan).
 
-Responsibilities (Phase 3 MVP):
+Responsibilities:
 
 1. For every field tagged `riscv_save_on_trap`, snapshot a pipeline-provided
    input into the CSR file on the `trap_enter` cycle. Between traps, the
    field's hwif_in is pass-through from `hwif_in_live`.
 
-2. For fields that are hw-writable but NOT save-on-trap, pass-through from
-   `hwif_in_live` to `hwif_in_drive` unchanged. The pipeline can route
-   hwif_in_live from the CSR file's own `hwif_out` (no-op) or compute
-   non-trap updates itself (e.g. MIE toggles on trap entry / xRET).
+2. For every field tagged `riscv_restore_on_ret`, snapshot a pipeline-
+   provided input into the CSR file on the `xret_enter` cycle (mret /
+   sret / dret). Same shape as save-on-trap but in the opposite direction
+   of the trap lifecycle. The pipeline computes the restore value
+   externally — for mstatus on a typical RISC-V core that's
+   `mie ← mpie`, `mpie ← 1`, `mpp ← priv_lvl_min`, all handed in via
+   the per-field `restore_<member>` ports — and the TrapCoord routes it
+   into `hwif_in_drive` with priority `trap_enter > xret_enter > live`.
+   `trap_enter` and `xret_enter` are specified to be mutually exclusive
+   by the RISC-V spec, so the priority order is a safety belt; either
+   ordering would produce the same behaviour in a spec-conformant
+   pipeline.
 
-3. `riscv_restore_on_ret`: Phase 3 MVP does NOT emit new ports for restore.
-   The restore semantics (which live field gets written from the saved
-   field on xRET) are CPU-design-specific; the user reads hwif_out values
-   from the CSR file and drives hwif_in_live externally.
+3. For fields that are hw-writable but have neither tag, pass-through
+   from `hwif_in_live` to `hwif_in_drive` unchanged. The pipeline can
+   route `hwif_in_live` from the CSR file's own `hwif_out` (hold) or
+   compute non-lifecycle updates itself (e.g. mstatus.MIE auto-clear
+   on trap entry).
 
 Interface:
 
   port clk: in Clock<SysDomain>;
   port rst: in Reset<Sync>;
-  port trap_enter:      in Bool;
-  port save_<member>:   in UInt<W>    per save-on-trap field, W = field width
-  port hwif_in_live:    in <HwifIn>;
-  port hwif_in_drive:   out <HwifIn>;
+  port trap_enter:        in Bool;
+  port xret_enter:        in Bool;
+  port save_<member>:     in UInt<W>   per save-on-trap field, W = field width
+  port restore_<member>:  in UInt<W>   per restore-on-ret field
+  port hwif_in_live:      in  <HwifIn>;
+  port hwif_in_drive:     out <HwifIn>;
 """
 
 from .scan_csrs import CsrDesignModel, CsrFieldModel, CsrRegModel
@@ -32,6 +43,11 @@ from .scan_csrs import CsrDesignModel, CsrFieldModel, CsrRegModel
 def _save_port_name(reg: CsrRegModel, field: CsrFieldModel) -> str:
     """`save_<reg>_<field>` matches the hwif member naming convention."""
     return f"save_{reg.name}_{field.name}"
+
+
+def _restore_port_name(reg: CsrRegModel, field: CsrFieldModel) -> str:
+    """`restore_<reg>_<field>` — symmetric counterpart to `save_…`."""
+    return f"restore_{reg.name}_{field.name}"
 
 
 def _all_hwif_in_members(design: CsrDesignModel) -> list[tuple[CsrRegModel, CsrFieldModel]]:
@@ -47,6 +63,12 @@ def _save_on_trap_fields(design: CsrDesignModel) -> list[tuple[CsrRegModel, CsrF
     ]
 
 
+def _restore_on_ret_fields(design: CsrDesignModel) -> list[tuple[CsrRegModel, CsrFieldModel]]:
+    return [
+        (reg, f) for reg in design.regs for f in reg.fields if f.restore_on_ret
+    ]
+
+
 def emit_trap_coordinator(design: CsrDesignModel, module_name: str) -> str:
     lines: list[str] = []
     lines.append(f"use {design.package_name};")
@@ -55,11 +77,16 @@ def emit_trap_coordinator(design: CsrDesignModel, module_name: str) -> str:
     lines.append("  port clk: in Clock<SysDomain>;")
     lines.append("  port rst: in Reset<Sync>;")
     lines.append("  port trap_enter: in Bool;")
+    lines.append("  port xret_enter: in Bool;")
 
-    # One save_ port per save_on_trap field.
     save_fields = _save_on_trap_fields(design)
     for reg, f in save_fields:
         port = _save_port_name(reg, f)
+        lines.append(f"  port {port}: in UInt<{f.width}>;")
+
+    restore_fields = _restore_on_ret_fields(design)
+    for reg, f in restore_fields:
+        port = _restore_port_name(reg, f)
         lines.append(f"  port {port}: in UInt<{f.width}>;")
 
     lines.append(f"  port hwif_in_live:  in  {design.hwif_in_struct};")
@@ -69,19 +96,36 @@ def emit_trap_coordinator(design: CsrDesignModel, module_name: str) -> str:
 
     all_hwif = _all_hwif_in_members(design)
     save_set = {(reg.name, f.name) for reg, f in save_fields}
+    restore_set = {(reg.name, f.name) for reg, f in restore_fields}
 
     for reg, f in all_hwif:
         member = f"{reg.name}_{f.name}"
-        if (reg.name, f.name) in save_set:
-            save_port = _save_port_name(reg, f)
+        live_expr = f"hwif_in_live.{member}"
+        has_save = (reg.name, f.name) in save_set
+        has_restore = (reg.name, f.name) in restore_set
+
+        if has_save and has_restore:
+            # Priority: trap_enter > xret_enter > live. Spec says the
+            # two pulses are mutually exclusive, so the order is a
+            # safety belt rather than a semantic knob.
             lines.append(
                 f"    hwif_in_drive.{member} = "
-                f"trap_enter ? {save_port} : hwif_in_live.{member};"
+                f"trap_enter ? {_save_port_name(reg, f)} : "
+                f"xret_enter ? {_restore_port_name(reg, f)} : "
+                f"{live_expr};"
+            )
+        elif has_save:
+            lines.append(
+                f"    hwif_in_drive.{member} = "
+                f"trap_enter ? {_save_port_name(reg, f)} : {live_expr};"
+            )
+        elif has_restore:
+            lines.append(
+                f"    hwif_in_drive.{member} = "
+                f"xret_enter ? {_restore_port_name(reg, f)} : {live_expr};"
             )
         else:
-            lines.append(
-                f"    hwif_in_drive.{member} = hwif_in_live.{member};"
-            )
+            lines.append(f"    hwif_in_drive.{member} = {live_expr};")
 
     if not all_hwif:
         # Defensive: if the design has no hw_writable fields, the HwifIn
