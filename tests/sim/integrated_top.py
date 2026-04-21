@@ -12,7 +12,9 @@ External interface (pipeline-facing):
   csr_addr / csr_opcode / csr_wdata  — CSR instruction operands
   cur_priv / valid                   — current privilege + valid signal
   trap_enter                         — one-cycle pulse to snapshot save fields
+  xret_enter                         — one-cycle pulse to apply restore fields
   save_<member>                      — per save-on-trap field, width-matched
+  restore_<member>                   — per restore-on-ret field, width-matched
   granted / illegal / cause          — access controller verdict
   csr_rdata                          — combinational readback
   <trap_signal>                      — per distinct riscv_trap_signal, pulses
@@ -43,6 +45,14 @@ def _save_fields(design: CsrDesignModel):
     return [
         (reg.name, f.name, f.width)
         for reg in design.regs for f in reg.fields if f.save_on_trap
+    ]
+
+
+def _restore_fields(design: CsrDesignModel):
+    """Every (reg_name, field_name, width) where riscv_restore_on_ret is set."""
+    return [
+        (reg.name, f.name, f.width)
+        for reg in design.regs for f in reg.fields if f.restore_on_ret
     ]
 
 
@@ -82,6 +92,7 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     xlen = design.xlen
     hwif_in_members = _hwif_in_members(design)
     save = _save_fields(design)
+    restore = _restore_fields(design)
     sigs = _trap_signals(design)
 
     lines: list[str] = []
@@ -106,8 +117,12 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("  port csr_opcode: in  UInt<3>;")
     lines.append("  port cur_priv:   in  UInt<2>;")
     lines.append("  port trap_enter: in  Bool;")
+    lines.append("  port xret_enter: in  Bool;")
     for _reg, _fld, width in save:
         port = f"save_{_reg}_{_fld}"
+        lines.append(f"  port {port}: in UInt<{width}>;")
+    for _reg, _fld, width in restore:
+        port = f"restore_{_reg}_{_fld}"
         lines.append(f"  port {port}: in UInt<{width}>;")
     lines.append("")
     lines.append("  port granted:    out Bool;")
@@ -168,8 +183,12 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append(f"  inst trap: {trap_mod}")
     lines.append("    clk <- clk; rst <- rst;")
     lines.append("    trap_enter <- trap_enter;")
+    lines.append("    xret_enter <- xret_enter;")
     for _reg, _fld, _w in save:
         port = f"save_{_reg}_{_fld}"
+        lines.append(f"    {port} <- {port};")
+    for _reg, _fld, _w in restore:
+        port = f"restore_{_reg}_{_fld}"
         lines.append(f"    {port} <- {port};")
     lines.append("    hwif_in_live  <- hwif_live_w;")
     lines.append("    hwif_in_drive -> hwif_drive_w;")

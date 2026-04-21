@@ -1858,56 +1858,46 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   // ── HW save + restore path ────────────────────────────────────
   //
-  // `hwif_in_live` is the "what storage should be on a non-save
-  // cycle" side of the TrapCoord's mux. The sw=rw;hw=rw encoding
-  // drives storage from hwif_in every cycle that SW isn't writing,
-  // so feeding hwif_out back into hwif_in_live makes storage *hold*
-  // its current value. Two exceptions:
+  // `hwif_in_live` is the "what storage should be on a non-trap /
+  // non-xret cycle" side of the TrapCoord's mux. The sw=rw;hw=rw
+  // encoding drives storage from hwif_in every cycle SW isn't
+  // writing, so feeding hwif_out back into hwif_in_live makes
+  // storage *hold* its current value. One exception:
   //
-  //   1. mret (`csr_restore_mret_i`) — we override three mstatus
-  //      fields on the cycle of the mret. The TrapCoord doesn't
-  //      model mret, but it *does* pass `hwif_in_live` through to
-  //      its non-trap output, so folding the mret behaviour into
-  //      `hwif_in_live` gets forwarded correctly. (save_cause_i
-  //      and restore_mret_i are mutually exclusive by design, so
-  //      no arbiter is needed.)
+  //   * mstatus.mie auto-clear on trap entry — mie is *not* a
+  //     save_on_trap field (save-on-trap would write it from an
+  //     input port), so the TrapCoord passes `hwif_in_live.mstatus_mie`
+  //     through on trap-enter cycles. We drive that input to 0
+  //     when `csr_save_cause_i` is high so storage gets cleared.
   //
-  //   2. mstatus.mie auto-clear on trap — mie isn't a save_on_trap
-  //      field, so the TrapCoord passes `hwif_in_live.mstatus_mie`
-  //      through unchanged. We drive that input to 0 when
-  //      `csr_save_cause_i` is high so storage gets cleared.
+  // The mret restore of mstatus.{mie, mpie, mpp} is now a first-
+  // class TrapCoord feature: each of those fields is tagged
+  // `riscv_restore_on_ret` in the RDL, the generator emits a
+  // `restore_<field>` port + an `xret_enter` pulse, and the three
+  // restore values (old mpie → mie, 1 → mpie, U → mpp) are wired
+  // into the TrapCoord instance below.
   //
-  // Other HW-side actions:
-  //   * `save_mstatus_mpie` feeds the TrapCoord from the CURRENT
-  //     `hwif_out.mstatus_mie` (old mie, the bit we want to save).
-  //   * `save_mstatus_mpp`  feeds from `priv_lvl_q`.
-  //   * WPRI reserved fields tied to 0 (read-zero behaviour).
+  // Save ports:
+  //   * `save_mstatus_mpie` ← CURRENT `hwif_out.mstatus_mie` (old mie).
+  //   * `save_mstatus_mpp`  ← `priv_lvl_q`.
+  //
+  // WPRI reserved fields are tied to 0 for read-as-zero.
   MTrapIbexCsrFileHwifIn ourfile_hwif_in_live;
 
   assign ourfile_hwif_in_live.mepc_epc     = ourfile_hwif_out.mepc_epc;
   assign ourfile_hwif_in_live.mcause_cause = ourfile_hwif_out.mcause_cause;
   assign ourfile_hwif_in_live.mtval_tval   = ourfile_hwif_out.mtval_tval;
 
-  // mstatus.mie live drive — picks between:
-  //   save-cycle → 0 (auto-clear)
-  //   mret-cycle → old mpie (restore)
-  //   hold       → current mie
+  // mstatus.mie live drive — auto-clear on trap, hold otherwise.
+  // The mret restore path goes through `restore_mstatus_mie` on the
+  // TrapCoord (sourced from hwif_out.mstatus_mpie), not through here.
   assign ourfile_hwif_in_live.mstatus_mie  =
-      csr_save_cause_i    ? 1'b0                           :
-      csr_restore_mret_i  ? ourfile_hwif_out.mstatus_mpie  :
-                            ourfile_hwif_out.mstatus_mie;
+      csr_save_cause_i ? 1'b0 : ourfile_hwif_out.mstatus_mie;
 
-  // mstatus.mpie live drive — the TrapCoord overrides this on the
-  // save cycle with `save_mstatus_mpie`, so we only need to handle
-  // the mret-restore and hold cases here.
-  assign ourfile_hwif_in_live.mstatus_mpie =
-      csr_restore_mret_i  ? 1'b1                           :
-                            ourfile_hwif_out.mstatus_mpie;
-
-  // mstatus.mpp live drive — same pattern.
-  assign ourfile_hwif_in_live.mstatus_mpp  =
-      csr_restore_mret_i  ? PRIV_LVL_U                     :
-                            ourfile_hwif_out.mstatus_mpp;
+  // mstatus.mpie / mpp: plain hold. Save + restore are both handled
+  // by the TrapCoord's save_/restore_ port muxes.
+  assign ourfile_hwif_in_live.mstatus_mpie = ourfile_hwif_out.mstatus_mpie;
+  assign ourfile_hwif_in_live.mstatus_mpp  = ourfile_hwif_out.mstatus_mpp;
 
   // WPRI reserved fields: tied to 0.
   assign ourfile_hwif_in_live.mstatus_reserved_2_1  = '0;
@@ -1956,19 +1946,26 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   };
 
   MTrapIbexCsrTrapCoord u_ourfile_trap (
-    .clk                (clk_i),
-    .rst                (~rst_ni),
-    .trap_enter         (csr_save_cause_i),
+    .clk                 (clk_i),
+    .rst                 (~rst_ni),
+    .trap_enter          (csr_save_cause_i),
+    .xret_enter          (csr_restore_mret_i),
     // Ibex's `exception_pc` is already aligned (bit 0 always zero);
     // masking explicitly to match our RDL's WARL on mepc.epc is
     // belt-and-suspenders.
-    .save_mepc_epc      ({exception_pc[31:1], 1'b0}),
-    .save_mcause_cause  (mcause_save_flat),
-    .save_mtval_tval    (csr_mtval_i),
-    .save_mstatus_mpie  (ourfile_hwif_out.mstatus_mie),  // save old mie
-    .save_mstatus_mpp   (priv_lvl_q),                    // save old priv
-    .hwif_in_live       (ourfile_hwif_in_live),
-    .hwif_in_drive      (ourfile_hwif_in)
+    .save_mepc_epc       ({exception_pc[31:1], 1'b0}),
+    .save_mcause_cause   (mcause_save_flat),
+    .save_mtval_tval     (csr_mtval_i),
+    .save_mstatus_mpie   (ourfile_hwif_out.mstatus_mie),   // save old mie
+    .save_mstatus_mpp    (priv_lvl_q),                     // save old priv
+    // mret restore per RISC-V spec: mie ← mpie, mpie ← 1, mpp ← U.
+    // priv_lvl_min (U here, or M on an M-only core) is the
+    // least-privileged supported level.
+    .restore_mstatus_mie  (ourfile_hwif_out.mstatus_mpie),
+    .restore_mstatus_mpie (1'b1),
+    .restore_mstatus_mpp  (PRIV_LVL_U),
+    .hwif_in_live        (ourfile_hwif_in_live),
+    .hwif_in_drive       (ourfile_hwif_in)
   );
 
   MTrapIbexCsrFile u_ourfile (

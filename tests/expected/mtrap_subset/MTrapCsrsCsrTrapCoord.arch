@@ -4,21 +4,25 @@ module MTrapCsrsCsrTrapCoord
   port clk: in Clock<SysDomain>;
   port rst: in Reset<Sync>;
   port trap_enter: in Bool;
+  port xret_enter: in Bool;
   port save_mstatus_mpie: in UInt<1>;
   port save_mstatus_mpp: in UInt<2>;
   port save_mepc_epc: in UInt<32>;
   port save_mcause_cause: in UInt<32>;
   port save_mtval_tval: in UInt<32>;
+  port restore_mstatus_mie: in UInt<1>;
+  port restore_mstatus_mpie: in UInt<1>;
+  port restore_mstatus_mpp: in UInt<2>;
   port hwif_in_live:  in  MTrapCsrsCsrFileHwifIn;
   port hwif_in_drive: out MTrapCsrsCsrFileHwifIn;
 
   comb
     hwif_in_drive.mstatus_reserved_2_1 = hwif_in_live.mstatus_reserved_2_1;
-    hwif_in_drive.mstatus_mie = hwif_in_live.mstatus_mie;
+    hwif_in_drive.mstatus_mie = xret_enter ? restore_mstatus_mie : hwif_in_live.mstatus_mie;
     hwif_in_drive.mstatus_reserved_6_4 = hwif_in_live.mstatus_reserved_6_4;
-    hwif_in_drive.mstatus_mpie = trap_enter ? save_mstatus_mpie : hwif_in_live.mstatus_mpie;
+    hwif_in_drive.mstatus_mpie = trap_enter ? save_mstatus_mpie : xret_enter ? restore_mstatus_mpie : hwif_in_live.mstatus_mpie;
     hwif_in_drive.mstatus_reserved_10_8 = hwif_in_live.mstatus_reserved_10_8;
-    hwif_in_drive.mstatus_mpp = trap_enter ? save_mstatus_mpp : hwif_in_live.mstatus_mpp;
+    hwif_in_drive.mstatus_mpp = trap_enter ? save_mstatus_mpp : xret_enter ? restore_mstatus_mpp : hwif_in_live.mstatus_mpp;
     hwif_in_drive.mstatus_wpri_hi = hwif_in_live.mstatus_wpri_hi;
     hwif_in_drive.mepc_epc = trap_enter ? save_mepc_epc : hwif_in_live.mepc_epc;
     hwif_in_drive.mcause_cause = trap_enter ? save_mcause_cause : hwif_in_live.mcause_cause;
