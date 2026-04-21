@@ -10,27 +10,28 @@ module MTrapIbexCsrFile
 
   default seq on clk rising;
 
-  reg mscratch_r: MscratchReg reset rst => MscratchReg { value: 0 };
   reg mtvec_r: MtvecReg reset rst => MtvecReg { mode: 0, base: 0 };
+  reg mepc_r: MepcReg reset rst => MepcReg { epc: 0 };
+  reg mcause_r: McauseReg reset rst => McauseReg { cause: 0 };
+  reg mtval_r: MtvalReg reset rst => MtvalReg { tval: 0 };
+  reg mscratch_r: MscratchReg reset rst => MscratchReg { value: 0 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
-    12'h340 => mscratch_r.value,
     12'h305 => {mtvec_r.base, mtvec_r.mode},
+    12'h341 => mepc_r.epc,
+    12'h342 => mcause_r.cause,
+    12'h343 => mtval_r.tval,
+    12'h340 => mscratch_r.value,
     _ => 0
   end match;
 
   seq
+    mepc_r.epc <= hwif_in.mepc_epc;
+    mcause_r.cause <= hwif_in.mcause_cause;
+    mtval_r.tval <= hwif_in.mtval_tval;
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
-        if csr.cmd_addr == 12'h340
-          mscratch_r.value <= match csr.cmd_op
-              2'b01 => csr.cmd_wdata[31:0],
-              2'b10 => mscratch_r.value | csr.cmd_wdata[31:0],
-              2'b11 => mscratch_r.value & (~csr.cmd_wdata[31:0]),
-              _    => mscratch_r.value
-            end match;
-        end if
         if csr.cmd_addr == 12'h305
           mtvec_r.mode <= match (match csr.cmd_op
               2'b01 => csr.cmd_wdata[1:0],
@@ -49,6 +50,38 @@ module MTrapIbexCsrFile
               _    => mtvec_r.base
             end match;
         end if
+        if csr.cmd_addr == 12'h341
+          mepc_r.epc <= (match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mepc_r.epc | csr.cmd_wdata[31:0],
+              2'b11 => mepc_r.epc & (~csr.cmd_wdata[31:0]),
+              _    => mepc_r.epc
+            end match) & 32'hfffffffe;
+        end if
+        if csr.cmd_addr == 12'h342
+          mcause_r.cause <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mcause_r.cause | csr.cmd_wdata[31:0],
+              2'b11 => mcause_r.cause & (~csr.cmd_wdata[31:0]),
+              _    => mcause_r.cause
+            end match;
+        end if
+        if csr.cmd_addr == 12'h343
+          mtval_r.tval <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mtval_r.tval | csr.cmd_wdata[31:0],
+              2'b11 => mtval_r.tval & (~csr.cmd_wdata[31:0]),
+              _    => mtval_r.tval
+            end match;
+        end if
+        if csr.cmd_addr == 12'h340
+          mscratch_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mscratch_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mscratch_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mscratch_r.value
+            end match;
+        end if
       end if
     end if
   end seq
@@ -57,9 +90,12 @@ module MTrapIbexCsrFile
     csr.cmd_ready = true;
     csr.rsp_valid = csr.cmd_valid;
     csr.rsp_rdata = csr.cmd_valid ? csr_rdata_mux : 0;
-    hwif_out.mscratch_value = mscratch_r.value;
     hwif_out.mtvec_mode = mtvec_r.mode;
     hwif_out.mtvec_base = mtvec_r.base;
+    hwif_out.mepc_epc = mepc_r.epc;
+    hwif_out.mcause_cause = mcause_r.cause;
+    hwif_out.mtval_tval = mtval_r.tval;
+    hwif_out.mscratch_value = mscratch_r.value;
   end comb
 
 end module MTrapIbexCsrFile

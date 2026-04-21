@@ -56,6 +56,10 @@ PROGRAMS: list[CpuProgram] = [
     CpuProgram(name="multictx_isr",     cocotb_module="test_multictx_isr"),
     CpuProgram(name="mscratch_csrfile", cocotb_module="test_mscratch_csrfile"),
     CpuProgram(name="mtvec_csrfile",    cocotb_module="test_mtvec_csrfile"),
+    CpuProgram(
+        name="mepc_mcause_mtval_csrfile",
+        cocotb_module="test_mepc_mcause_mtval_csrfile",
+    ),
 ]
 
 

@@ -4,10 +4,15 @@ module MTrapIbexCsrTrapCoord
   port clk: in Clock<SysDomain>;
   port rst: in Reset<Sync>;
   port trap_enter: in Bool;
+  port save_mepc_epc: in UInt<32>;
+  port save_mcause_cause: in UInt<32>;
+  port save_mtval_tval: in UInt<32>;
   port hwif_in_live:  in  MTrapIbexCsrFileHwifIn;
   port hwif_in_drive: out MTrapIbexCsrFileHwifIn;
 
   comb
-    hwif_in_drive._reserved = hwif_in_live._reserved;
+    hwif_in_drive.mepc_epc = trap_enter ? save_mepc_epc : hwif_in_live.mepc_epc;
+    hwif_in_drive.mcause_cause = trap_enter ? save_mcause_cause : hwif_in_live.mcause_cause;
+    hwif_in_drive.mtval_tval = trap_enter ? save_mtval_tval : hwif_in_live.mtval_tval;
   end comb
 end module MTrapIbexCsrTrapCoord
