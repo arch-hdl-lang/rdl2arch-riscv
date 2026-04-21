@@ -51,6 +51,20 @@
  *                      (M-only SoC never uses them) — the module
  *                      output `csr_mstatus_tw_o` is tied low, and
  *                      `priv_mode_lsu_o` drops its `mprv` gating.
+ *   6.5e — mie / mip (MSIE / MTIE / MEIE + fast[0] only).
+ *                      mie is plain SW-writable storage in our
+ *                      CsrFile. mip is HW-driven (sw=r;hw=w); the
+ *                      adapter drives `hwif_in.mip_{msip,mtip,meip,
+ *                      mfip_0}` every cycle from the live
+ *                      `irq_{software,timer,external}_i` +
+ *                      `irq_fast_i[0]` wires. SW reading mip sees a
+ *                      one-cycle-lagged mirror of the live lines.
+ *                      For the Ibex controller's combinational trap
+ *                      decision (`irqs_o = mip & mie_q` upstream),
+ *                      the adapter bypasses CsrFile storage entirely
+ *                      — `irqs_o` = live `irq_*_i` AND'd with
+ *                      `hwif_out.mie_*`. Preserves upstream's
+ *                      zero-latency trap decision.
  *
  * Everything else stays on Ibex's native path. Look for
  * `BEGIN rdl2arch` / `END rdl2arch` comment markers for the exact
@@ -278,8 +292,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // CSR-read-mux arm.
   logic [31:0] mstatus_rsp_rdata;
   // END rdl2arch
-  irqs_t       mie_q, mie_d;
-  logic        mie_en;
+  // BEGIN rdl2arch: mie_q / mie_d / mie_en removed — mie lives in
+  // the generated CsrFile. Its hwif_out.mie_* fields are consumed
+  // locally by the `irqs_o` reconstruction (see bottom of module).
+  logic [31:0] mie_rsp_rdata;
+  // END rdl2arch
   // BEGIN rdl2arch: `mscratch_q`/`mscratch_en` removed — mscratch now
   // lives inside the generated `MTrapIbexCsrFile` instanced at the
   // bottom of this module. The bus' `rsp_rdata` drives the read mux
@@ -298,7 +315,16 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   logic [31:0] mcause_rsp_rdata;
   logic [31:0] mtval_rsp_rdata;
   // END rdl2arch
+  // BEGIN rdl2arch: mip storage lives in our CsrFile now, but we
+  // keep an internal `mip` wire alias because `ibex_core.sv` reads
+  // `cs_registers_i.mip` via hierarchical ref for RVFI tracing.
+  // The wire carries the same live-IRQ view upstream had, so the
+  // tracing captures the same value; `irqs_o` at the bottom of the
+  // module also consumes it as the "live mip" side of the trap-
+  // decision AND.
   irqs_t       mip;
+  logic [31:0] mip_rsp_rdata;
+  // END rdl2arch
   dcsr_t       dcsr_q, dcsr_d;
   logic        dcsr_en;
   logic [31:0] depc_q, depc_d;
@@ -388,11 +414,17 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign illegal_csr_insn_o = csr_access_i & (illegal_csr | illegal_csr_write | illegal_csr_priv |
                                               illegal_csr_dbg);
 
-  // mip CSR is purely combinational - must be able to re-enable the clock upon WFI
+  // BEGIN rdl2arch: `mip` wire kept as a combinational alias of
+  // the live irq_*_i inputs — matches upstream's shape exactly so
+  // ibex_core.sv's RVFI hierarchical reads (`cs_registers_i.mip`)
+  // still resolve. Also feeds the `irqs_o` trap-decision AND at
+  // the bottom of the module.  mip *storage* is inside our
+  // CsrFile, fed per-bit from these same inputs via hwif_in.
   assign mip.irq_software = irq_software_i;
   assign mip.irq_timer    = irq_timer_i;
   assign mip.irq_external = irq_external_i;
   assign mip.irq_fast     = irq_fast_i;
+  // END rdl2arch
 
   // read logic
   always_comb begin
@@ -432,13 +464,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       CSR_MISA: csr_rdata_int = MISA_VALUE;
 
       // interrupt enable
-      CSR_MIE: begin
-        csr_rdata_int                                     = '0;
-        csr_rdata_int[CSR_MSIX_BIT]                       = mie_q.irq_software;
-        csr_rdata_int[CSR_MTIX_BIT]                       = mie_q.irq_timer;
-        csr_rdata_int[CSR_MEIX_BIT]                       = mie_q.irq_external;
-        csr_rdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] = mie_q.irq_fast;
-      end
+      // BEGIN rdl2arch: routed to MTrapIbexCsrFile. Our CsrFile's
+      // rdata mux already assembles MSIE/MTIE/MEIE + MFIE[0] at
+      // their spec bit positions. Unmodelled bits (MFIE[14:1] etc.)
+      // read as 0.
+      CSR_MIE: csr_rdata_int = mie_rsp_rdata;
+      // END rdl2arch
 
       // mcounteren: machine counter enable
       CSR_MCOUNTEREN: begin
@@ -470,13 +501,14 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       // END rdl2arch
 
       // mip: interrupt pending
-      CSR_MIP: begin
-        csr_rdata_int                                     = '0;
-        csr_rdata_int[CSR_MSIX_BIT]                       = mip.irq_software;
-        csr_rdata_int[CSR_MTIX_BIT]                       = mip.irq_timer;
-        csr_rdata_int[CSR_MEIX_BIT]                       = mip.irq_external;
-        csr_rdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] = mip.irq_fast;
-      end
+      // BEGIN rdl2arch: routed to MTrapIbexCsrFile. mip storage is
+      // HW-driven from the live `irq_*_i` inputs (see adapter at
+      // bottom of module) so `csrr t0, mip` reads a one-cycle-
+      // lagged mirror of those lines. In practice SW only ever
+      // reads mip from inside a trap handler — at which point the
+      // irq has been pending for >1 cycle and storage matches.
+      CSR_MIP: csr_rdata_int = mip_rsp_rdata;
+      // END rdl2arch
 
       CSR_MSECCFG: begin
         if (PMPEnable) begin
@@ -642,7 +674,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     exception_pc = pc_id_i;
 
     priv_lvl_d   = priv_lvl_q;
-    mie_en       = 1'b0;
+    // BEGIN rdl2arch: `mie_en` default + `CSR_MIE: mie_en = 1'b1;`
+    // write-case arm removed — mie storage now lives in the
+    // generated CsrFile. SW writes route through the bus mux below.
+    // END rdl2arch
     // BEGIN rdl2arch: mscratch/mepc/mcause/mtval/mtvec/mstatus
     // `_en`/`_d` removed — every one now lives in the generated
     // CsrFile. SW writes go through the bus mux at the bottom of
@@ -702,7 +737,9 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         // END rdl2arch
 
         // interrupt enable
-        CSR_MIE: mie_en = 1'b1;
+        // BEGIN rdl2arch: mie writes route through the bus mux.
+        CSR_MIE: ;
+        // END rdl2arch
 
         // BEGIN rdl2arch: `CSR_MSCRATCH: mscratch_en = 1'b1;` removed.
         // The mscratch write path runs through the generated CsrFile
@@ -952,8 +989,19 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   // Qualify incoming interrupt requests in mip CSR with mie CSR for controller and to re-enable
   // clock upon WFI (must be purely combinational).
-  assign irqs_o        = mip & mie_q;
+  // BEGIN rdl2arch: `mip` is the live-IRQ alias above. `mie` side
+  // reconstructs an `irqs_t` from our CsrFile's per-bit `hwif_out.
+  // mie_*`. Upstream modelled 15 fast IRQs; our RDL models only
+  // fast[0] so the upper 14 are effectively zero as a gate.
+  irqs_t live_mie;
+  assign live_mie.irq_software = ourfile_hwif_out.mie_msie;
+  assign live_mie.irq_timer    = ourfile_hwif_out.mie_mtie;
+  assign live_mie.irq_external = ourfile_hwif_out.mie_meie;
+  assign live_mie.irq_fast     = {14'b0, ourfile_hwif_out.mie_mfie_0};
+
+  assign irqs_o        = mip & live_mie;
   assign irq_pending_o = |irqs_o;
+  // END rdl2arch
 
   ////////////////////////
   // CSR instantiations //
@@ -975,23 +1023,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // — mepc storage lives in `MTrapIbexCsrFile.mepc_r`.
   // END rdl2arch
 
-  // MIE
-  assign mie_d.irq_software = csr_wdata_int[CSR_MSIX_BIT];
-  assign mie_d.irq_timer    = csr_wdata_int[CSR_MTIX_BIT];
-  assign mie_d.irq_external = csr_wdata_int[CSR_MEIX_BIT];
-  assign mie_d.irq_fast     = csr_wdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW];
-  ibex_csr #(
-    .Width     ($bits(irqs_t)),
-    .ShadowCopy(1'b0),
-    .ResetValue('0)
-  ) u_mie_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i ({mie_d}),
-    .wr_en_i   (mie_en),
-    .rd_data_o (mie_q),
-    .rd_error_o()
-  );
+  // BEGIN rdl2arch: upstream `mie_d.*` assigns + `u_mie_csr
+  // ibex_csr` instance removed — mie lives in `MTrapIbexCsrFile`.
+  // The controller consumes the per-bit values via
+  // `ourfile_hwif_out.mie_*` at the bottom of this module.
+  // END rdl2arch
 
   // BEGIN rdl2arch: upstream `u_mscratch_csr ibex_csr` instance
   // removed — mscratch storage has moved to the generated
@@ -1722,12 +1758,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   `ASSERT(IbexCsrOpEnRequiresAccess, csr_op_en_i |-> csr_access_i)
 
   ////////////////////////////////////////////////////////////////////
-  // BEGIN rdl2arch — generated CSR file attachment (Phase 6.5d)    //
+  // BEGIN rdl2arch — generated CSR file attachment (Phase 6.5e)    //
   //                                                                //
   // One `MTrapIbexCsrFile` instance holds the live state for every //
-  // CSR we've migrated out of Ibex so far:                         //
+  // M-trap CSR in our fixture:                                     //
   //   mscratch (0x340), mtvec (0x305), mepc (0x341),               //
-  //   mcause (0x342), mtval (0x343), mstatus (0x300).              //
+  //   mcause (0x342), mtval (0x343), mstatus (0x300),              //
+  //   mie (0x304), mip (0x344).                                    //
   //                                                                //
   // Wiring:                                                        //
   //   * SW bus: cmd_valid = (csr_op_en_i & addr-is-ours) | mtvec-  //
@@ -1736,7 +1773,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   //   * rsp_rdata is combinational from cmd_addr — Ibex expects    //
   //     csr_rdata_o valid on the same cycle as csr_op_en, matches. //
   //   * `granted = 1`: Ibex-only-M core; access-controller hook-up //
-  //     deferred to a later sub-phase.                             //
+  //     deferred.                                                  //
   //   * HW save: `MTrapIbexCsrTrapCoord` muxes `hwif_in_drive.*`   //
   //     between `hwif_in_live` (which we shape per field below)    //
   //     and the `save_*` inputs when `csr_save_cause_i` pulses.    //
@@ -1746,6 +1783,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   //     drives below — the TrapCoord doesn't know about mret, so   //
   //     we fold the restore logic into the *non-save-cycle* side   //
   //     of its mux, which it passes through unchanged.             //
+  //   * mip (sw=r;hw=w) storage is driven every cycle from the     //
+  //     live `irq_*_i` inputs. SW reads see a one-cycle-lagged     //
+  //     mirror; the controller's trap-decision (`irqs_o`) bypasses //
+  //     CsrFile storage and uses the live irq lines directly.      //
   ////////////////////////////////////////////////////////////////////
 
   logic                             ourfile_cmd_valid;
@@ -1758,15 +1799,16 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   MTrapIbexCsrFileHwifIn            ourfile_hwif_in;
   MTrapIbexCsrFileHwifOut           ourfile_hwif_out;
 
-  // addr selector — add more entries as later sub-phases migrate
-  // additional CSRs.
+  // addr selector — covers every M-trap CSR in our fixture.
   logic                             ourfile_owns_addr;
   assign ourfile_owns_addr = (csr_addr_i == CSR_MSCRATCH)
                            | (csr_addr_i == CSR_MTVEC)
                            | (csr_addr_i == CSR_MEPC)
                            | (csr_addr_i == CSR_MCAUSE)
                            | (csr_addr_i == CSR_MTVAL)
-                           | (csr_addr_i == CSR_MSTATUS);
+                           | (csr_addr_i == CSR_MSTATUS)
+                           | (csr_addr_i == CSR_MIE)
+                           | (csr_addr_i == CSR_MIP);
 
   // SW-side cmd.
   //
@@ -1811,6 +1853,8 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign mcause_rsp_rdata   = ourfile_rsp_rdata;
   assign mtval_rsp_rdata    = ourfile_rsp_rdata;
   assign mstatus_rsp_rdata  = ourfile_rsp_rdata;
+  assign mie_rsp_rdata      = ourfile_rsp_rdata;
+  assign mip_rsp_rdata      = ourfile_rsp_rdata;
 
   // ── HW save + restore path ────────────────────────────────────
   //
@@ -1870,6 +1914,34 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign ourfile_hwif_in_live.mstatus_reserved_6_4  = '0;
   assign ourfile_hwif_in_live.mstatus_reserved_10_8 = '0;
   assign ourfile_hwif_in_live.mstatus_wpri_hi       = '0;
+
+  // ── mie WPRI drives ──────────────────────────────────────────
+  // mie fields msie/mtie/meie/mfie_0 are sw=rw;hw=r so they don't
+  // have hwif_in entries. The reserved bits do (sw=r;hw=w) — tie
+  // them low for read-as-zero behaviour.
+  assign ourfile_hwif_in_live.mie_wpri_0_0   = '0;
+  assign ourfile_hwif_in_live.mie_wpri_2_1   = '0;
+  assign ourfile_hwif_in_live.mie_wpri_6_4   = '0;
+  assign ourfile_hwif_in_live.mie_wpri_10_8  = '0;
+  assign ourfile_hwif_in_live.mie_wpri_15_12 = '0;
+  assign ourfile_hwif_in_live.mie_wpri_hi    = '0;
+
+  // ── mip live-mirror drive ────────────────────────────────────
+  // mip is sw=r;hw=w — every bit comes from this adapter. The
+  // TrapCoord passes hwif_in_live through for non-save-cycle
+  // fields, so storage gets driven from the live irq_*_i inputs
+  // on every clock.  SW observes mip one cycle later; the
+  // controller-side `irqs_o` path above bypasses storage entirely.
+  assign ourfile_hwif_in_live.mip_msip   = irq_software_i;
+  assign ourfile_hwif_in_live.mip_mtip   = irq_timer_i;
+  assign ourfile_hwif_in_live.mip_meip   = irq_external_i;
+  assign ourfile_hwif_in_live.mip_mfip_0 = irq_fast_i[0];
+  assign ourfile_hwif_in_live.mip_wpri_0_0   = '0;
+  assign ourfile_hwif_in_live.mip_wpri_2_1   = '0;
+  assign ourfile_hwif_in_live.mip_wpri_6_4   = '0;
+  assign ourfile_hwif_in_live.mip_wpri_10_8  = '0;
+  assign ourfile_hwif_in_live.mip_wpri_15_12 = '0;
+  assign ourfile_hwif_in_live.mip_wpri_hi    = '0;
 
   // Encode Ibex's packed `exc_cause_t` into our CsrFile's flat
   // 32-bit mcause shape. Same layout upstream had in its read path:
