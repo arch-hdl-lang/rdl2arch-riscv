@@ -34,15 +34,20 @@ def arch_bin() -> str:
 
 
 def rdl_fixtures() -> list[Path]:
-    """CSR fixtures consumed by RiscvCsrExporter. CLINT fixtures live
-    alongside and follow the `clint_*.rdl` naming convention — split out
-    so they go through RiscvClintExporter instead."""
+    """CSR fixtures consumed by RiscvCsrExporter. Per-module-type prefixes
+    (`clint_*.rdl`, `plic_*.rdl`) route to their own exporters — filter
+    those out of the default CSR pass."""
     return sorted(p for p in RDL_DIR.glob("*.rdl")
-                  if not p.name.startswith("clint_"))
+                  if not (p.name.startswith("clint_")
+                          or p.name.startswith("plic_")))
 
 
 def clint_fixtures() -> list[Path]:
     return sorted(RDL_DIR.glob("clint_*.rdl"))
+
+
+def plic_fixtures() -> list[Path]:
+    return sorted(RDL_DIR.glob("plic_*.rdl"))
 
 
 @pytest.fixture(scope="session")

@@ -15,7 +15,8 @@ later phase).
   - ✅ Phase 4b — Integrated-top wrapper (generated at test time) + cocotb/Verilator SV parity.
 - ✅ Phase 5 — Interrupt controllers.
   - ✅ Phase 5.0 — `mip` / `mie` CSRs in the mtrap fixture.
-  - ✅ Phase 5.1 — CLINT generator (`RiscvClintExporter` emits the MMIO register block + timer/msip logic module). Single-hart; multi-hart and PLIC are follow-ups.
+  - ✅ Phase 5.1 — CLINT generator (`RiscvClintExporter` emits the MMIO register block + timer/msip logic module). Single-hart; multi-hart is a follow-up.
+  - ✅ Phase 5.2 — PLIC generator (`RiscvPlicExporter` emits the MMIO register block + priority-arbitration logic module). 8-source, single M-mode context, level-triggered, read-only claim. Multi-context, edge detection, and full claim/complete handshake are follow-ups.
 
 ## Install
 
@@ -75,6 +76,7 @@ RiscvCsrExporter().export(rdlc.elaborate().top, "out/")
 | `riscv_save_on_trap`  | Field                     | `bool` | Auto-written by trap coordinator on trap entry (wired in Phase 3) |
 | `riscv_restore_on_ret`| Field                     | `bool` | Auto-restored by trap coordinator on xRET (wired in Phase 3) |
 | `riscv_intr_clint_role`| Reg                      | `"msip"` / `"mtimecmp_lo"` / `"mtimecmp_hi"` / `"mtime_lo"` / `"mtime_hi"` | CLINT reg role — used by `RiscvClintExporter` |
+| `riscv_intr_plic_role` | Reg                      | `"priority"` / `"pending"` / `"enable"` / `"threshold"` / `"claim"` | PLIC reg role — used by `RiscvPlicExporter` |
 
 ## CSR address conventions
 
