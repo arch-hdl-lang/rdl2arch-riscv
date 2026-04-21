@@ -347,10 +347,16 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   pmp_mseccfg_t                pmp_mseccfg;
 
   // Hardware performance monitor signals
+  //
+  // BEGIN rdl2arch: mcountinhibit storage has been migrated onto the
+  // generated `MTrapIbexCsrFile`. The `mcountinhibit` wire here still
+  // exists so the HPM counter increment blocks below can AND it in
+  // unchanged — it's sourced from our CsrFile's spec-layout flat
+  // readback every cycle. The `_d`/`_q`/`_we` signals upstream used
+  // are gone; no more flops on this side for this register.
   logic [31:0]                 mcountinhibit;
-  // Only have mcountinhibit flops for counters that actually exist
-  logic [MHPMCounterNum+3-1:0] mcountinhibit_d, mcountinhibit_q;
-  logic                        mcountinhibit_we;
+  logic [31:0]                 mcountinhibit_rsp_rdata;
+  // END rdl2arch
 
   // mhpmcounter flops are elaborated below providing only the precise number that is required based
   // on MHPMCounterNum/MHPMCounterWidth. This signal connects to the Q output of these flops
@@ -573,7 +579,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       end
 
       // machine counter/timers
-      CSR_MCOUNTINHIBIT: csr_rdata_int = mcountinhibit;
+      CSR_MCOUNTINHIBIT: csr_rdata_int = mcountinhibit_rsp_rdata;
       CSR_MHPMEVENT3,
       CSR_MHPMEVENT4,  CSR_MHPMEVENT5,  CSR_MHPMEVENT6,  CSR_MHPMEVENT7,
       CSR_MHPMEVENT8,  CSR_MHPMEVENT9,  CSR_MHPMEVENT10, CSR_MHPMEVENT11,
@@ -716,7 +722,8 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     };
     // END rdl2arch
 
-    mcountinhibit_we = 1'b0;
+    // rdl2arch: `mcountinhibit_we = 1'b0` default removed — SW writes to
+    // mcountinhibit now route through the CsrFile bus instead.
     mhpmcounter_we   = '0;
     mhpmcounterh_we  = '0;
 
@@ -797,8 +804,9 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         CSR_DSCRATCH0: dscratch0_en = 1'b1;
         CSR_DSCRATCH1: dscratch1_en = 1'b1;
 
-        // machine counter/timers
-        CSR_MCOUNTINHIBIT: mcountinhibit_we = 1'b1;
+        // machine counter/timers — mcountinhibit writes go through our
+        // CsrFile; no write-enable pulse needed on this side.
+        CSR_MCOUNTINHIBIT: ;
 
         CSR_MCYCLE,
         CSR_MINSTRET,
@@ -1350,11 +1358,12 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   // update enable signals
   always_comb begin : mcountinhibit_update
-    if (mcountinhibit_we == 1'b1) begin
-      // bit 1 must always be 0
-      mcountinhibit_d = {csr_wdata_int[MHPMCounterNum+2:2], 1'b0, csr_wdata_int[0]};
-    end else begin
-      mcountinhibit_d = mcountinhibit_q;
+    if (1'b0) begin : _unused_mcountinhibit_update
+      // rdl2arch: mcountinhibit storage moved to our CsrFile.
+      // The upstream `if (mcountinhibit_we) ... else` body is gone;
+      // this `always_comb` has no driven outputs now but we keep
+      // the block name so anything downstream that lint-references
+      // it still resolves.
     end
   end
 
@@ -1493,27 +1502,24 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     end
   end
 
-  if (MHPMCounterNum < 29) begin : g_mcountinhibit_reduced
+  // BEGIN rdl2arch: mcountinhibit now sourced from our CsrFile's
+  // spec-layout flat view. Bits 0 (cy), 2 (ir), 3..12 (hpm3..hpm12)
+  // are the implemented inhibits for our MHPMCounterNum=10 config;
+  // bit 1 (tm) and bits 13..31 are WPRI and read as zero from the
+  // flat output — matching upstream's pad-with-zeros behavior.
+  assign mcountinhibit = ourfile_hwif_out.mcountinhibit_rdata_flat;
+  if (MHPMCounterNum < 29) begin : g_mcountinhibit_hpm_lint_tieoffs
     logic [29-MHPMCounterNum-1:0] unused_mhphcounter_we;
     logic [29-MHPMCounterNum-1:0] unused_mhphcounterh_we;
     logic [29-MHPMCounterNum-1:0] unused_mhphcounter_incr;
 
-    assign mcountinhibit = {{29 - MHPMCounterNum{1'b0}}, mcountinhibit_q};
-    // Lint tieoffs for unused bits
+    // Lint tieoffs for unused HPM counter bits (unchanged from
+    // upstream — these are unrelated to mcountinhibit storage).
     assign unused_mhphcounter_we   = mhpmcounter_we[31:MHPMCounterNum+3];
     assign unused_mhphcounterh_we  = mhpmcounterh_we[31:MHPMCounterNum+3];
     assign unused_mhphcounter_incr = mhpmcounter_incr[31:MHPMCounterNum+3];
-  end else begin : g_mcountinhibit_full
-    assign mcountinhibit = mcountinhibit_q;
   end
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      mcountinhibit_q <= '0;
-    end else begin
-      mcountinhibit_q <= mcountinhibit_d;
-    end
-  end
+  // END rdl2arch
 
   /////////////////////////////
   // Debug trigger registers //
@@ -1815,7 +1821,8 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
                            | (csr_addr_i == CSR_MTVAL)
                            | (csr_addr_i == CSR_MSTATUS)
                            | (csr_addr_i == CSR_MIE)
-                           | (csr_addr_i == CSR_MIP);
+                           | (csr_addr_i == CSR_MIP)
+                           | (csr_addr_i == CSR_MCOUNTINHIBIT);
 
   // SW-side cmd.
   //
@@ -1862,6 +1869,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign mstatus_rsp_rdata  = ourfile_rsp_rdata;
   assign mie_rsp_rdata      = ourfile_rsp_rdata;
   assign mip_rsp_rdata      = ourfile_rsp_rdata;
+  assign mcountinhibit_rsp_rdata = ourfile_rsp_rdata;
 
   // ── HW save + restore path ────────────────────────────────────
   //
@@ -1942,6 +1950,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign ourfile_hwif_in_live.mip_wpri_10_8  = '0;
   assign ourfile_hwif_in_live.mip_wpri_15_12 = '0;
   assign ourfile_hwif_in_live.mip_wpri_hi    = '0;
+
+  // ── mcountinhibit WPRI drives ────────────────────────────────
+  // cy / ir / hpm are sw=rw;hw=r — no hwif_in entries. The WPRI
+  // fields (reserved_tm, reserved_hi) are sw=r;hw=w and need to
+  // be tied to 0 for read-as-zero.
+  assign ourfile_hwif_in_live.mcountinhibit_reserved_tm = '0;
+  assign ourfile_hwif_in_live.mcountinhibit_reserved_hi = '0;
 
   // Encode Ibex's packed `exc_cause_t` into our CsrFile's flat
   // 32-bit mcause shape. Same layout upstream had in its read path:

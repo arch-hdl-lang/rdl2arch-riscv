@@ -69,6 +69,8 @@ module MTrapIbexRiscvTop
     hwif_live_w.mip_wpri_15_12 = 0;
     hwif_live_w.mip_mfip_0 = 0;
     hwif_live_w.mip_wpri_hi = 0;
+    hwif_live_w.mcountinhibit_reserved_tm = 0;
+    hwif_live_w.mcountinhibit_reserved_hi = 0;
 
     cmd_op_w = csr_opcode[1:0];
     csr_cmd_ready = cmd_ready_w;

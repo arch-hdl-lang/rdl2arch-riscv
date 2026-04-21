@@ -8,7 +8,8 @@ package MTrapIbexCsrFilePkg
     Mscratch,
     Mstatus,
     Mie,
-    Mip
+    Mip,
+    Mcountinhibit
   end enum MTrapIbexCsrFileAddr
 
   struct MtvecReg
@@ -69,6 +70,14 @@ package MTrapIbexCsrFilePkg
     wpri_hi: UInt<15>;
   end struct MipReg
 
+  struct McountinhibitReg
+    cy: UInt<1>;
+    reserved_tm: UInt<1>;
+    ir: UInt<1>;
+    hpm: UInt<10>;
+    reserved_hi: UInt<19>;
+  end struct McountinhibitReg
+
   struct MTrapIbexCsrFileHwifIn
     mepc_epc: UInt<32>;
     mcause_cause: UInt<32>;
@@ -96,6 +105,8 @@ package MTrapIbexCsrFilePkg
     mip_wpri_15_12: UInt<4>;
     mip_mfip_0: UInt<1>;
     mip_wpri_hi: UInt<15>;
+    mcountinhibit_reserved_tm: UInt<1>;
+    mcountinhibit_reserved_hi: UInt<19>;
   end struct MTrapIbexCsrFileHwifIn
 
   struct MTrapIbexCsrFileHwifOut
@@ -121,6 +132,10 @@ package MTrapIbexCsrFilePkg
     mie_mfie_0: UInt<1>;
     mie_rdata_flat: UInt<32>;
     mip_rdata_flat: UInt<32>;
+    mcountinhibit_cy: UInt<1>;
+    mcountinhibit_ir: UInt<1>;
+    mcountinhibit_hpm: UInt<10>;
+    mcountinhibit_rdata_flat: UInt<32>;
   end struct MTrapIbexCsrFileHwifOut
 
   bus MTrapIbexCsrFileBus

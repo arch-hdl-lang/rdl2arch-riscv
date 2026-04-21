@@ -18,6 +18,7 @@ module MTrapIbexCsrFile
   reg mstatus_r: MstatusReg reset rst => MstatusReg { wpri_lo: 0, reserved_2_1: 0, mie: 0, reserved_6_4: 0, mpie: 0, reserved_10_8: 0, mpp: 0, wpri_hi: 0 };
   reg mie_r: MieReg reset rst => MieReg { wpri_0_0: 0, wpri_2_1: 0, msie: 0, wpri_6_4: 0, mtie: 0, wpri_10_8: 0, meie: 0, wpri_15_12: 0, mfie_0: 0, wpri_hi: 0 };
   reg mip_r: MipReg reset rst => MipReg { wpri_0_0: 0, wpri_2_1: 0, msip: 0, wpri_6_4: 0, mtip: 0, wpri_10_8: 0, meip: 0, wpri_15_12: 0, mfip_0: 0, wpri_hi: 0 };
+  reg mcountinhibit_r: McountinhibitReg reset rst => McountinhibitReg { cy: 0, reserved_tm: 0, ir: 0, hpm: 0, reserved_hi: 0 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
@@ -29,6 +30,7 @@ module MTrapIbexCsrFile
     12'h300 => {19'h0, mstatus_r.mpp, 3'h0, mstatus_r.mpie, 3'h0, mstatus_r.mie, 2'h0, false},
     12'h304 => {15'h0, mie_r.mfie_0, 4'h0, mie_r.meie, 3'h0, mie_r.mtie, 3'h0, mie_r.msie, 2'h0, false},
     12'h344 => {15'h0, mip_r.mfip_0, 4'h0, mip_r.meip, 3'h0, mip_r.mtip, 3'h0, mip_r.msip, 2'h0, false},
+    12'h320 => {19'h0, mcountinhibit_r.hpm, mcountinhibit_r.ir, false, mcountinhibit_r.cy},
     _ => 0
   end match;
 
@@ -59,6 +61,8 @@ module MTrapIbexCsrFile
     mip_r.wpri_15_12 <= hwif_in.mip_wpri_15_12;
     mip_r.mfip_0 <= hwif_in.mip_mfip_0;
     mip_r.wpri_hi <= hwif_in.mip_wpri_hi;
+    mcountinhibit_r.reserved_tm <= hwif_in.mcountinhibit_reserved_tm;
+    mcountinhibit_r.reserved_hi <= hwif_in.mcountinhibit_reserved_hi;
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
         if csr.cmd_addr == 12'h305
@@ -157,6 +161,26 @@ module MTrapIbexCsrFile
               _    => mie_r.mfie_0
             end match;
         end if
+        if csr.cmd_addr == 12'h320
+          mcountinhibit_r.cy <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[0],
+              2'b10 => mcountinhibit_r.cy | csr.cmd_wdata[0],
+              2'b11 => mcountinhibit_r.cy & (~csr.cmd_wdata[0]),
+              _    => mcountinhibit_r.cy
+            end match;
+          mcountinhibit_r.ir <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[2],
+              2'b10 => mcountinhibit_r.ir | csr.cmd_wdata[2],
+              2'b11 => mcountinhibit_r.ir & (~csr.cmd_wdata[2]),
+              _    => mcountinhibit_r.ir
+            end match;
+          mcountinhibit_r.hpm <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[12:3],
+              2'b10 => mcountinhibit_r.hpm | csr.cmd_wdata[12:3],
+              2'b11 => mcountinhibit_r.hpm & (~csr.cmd_wdata[12:3]),
+              _    => mcountinhibit_r.hpm
+            end match;
+        end if
       end if
     end if
   end seq
@@ -187,6 +211,10 @@ module MTrapIbexCsrFile
     hwif_out.mie_mfie_0 = mie_r.mfie_0;
     hwif_out.mie_rdata_flat = {15'h0, mie_r.mfie_0, 4'h0, mie_r.meie, 3'h0, mie_r.mtie, 3'h0, mie_r.msie, 2'h0, false};
     hwif_out.mip_rdata_flat = {15'h0, mip_r.mfip_0, 4'h0, mip_r.meip, 3'h0, mip_r.mtip, 3'h0, mip_r.msip, 2'h0, false};
+    hwif_out.mcountinhibit_cy = mcountinhibit_r.cy;
+    hwif_out.mcountinhibit_ir = mcountinhibit_r.ir;
+    hwif_out.mcountinhibit_hpm = mcountinhibit_r.hpm;
+    hwif_out.mcountinhibit_rdata_flat = {19'h0, mcountinhibit_r.hpm, mcountinhibit_r.ir, false, mcountinhibit_r.cy};
   end comb
 
 end module MTrapIbexCsrFile

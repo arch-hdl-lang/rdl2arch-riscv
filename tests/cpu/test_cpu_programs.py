@@ -68,6 +68,10 @@ PROGRAMS: list[CpuProgram] = [
         name="mie_mip_csrfile",
         cocotb_module="test_mie_mip_csrfile",
     ),
+    CpuProgram(
+        name="mcountinhibit_csrfile",
+        cocotb_module="test_mcountinhibit_csrfile",
+    ),
 ]
 
 
