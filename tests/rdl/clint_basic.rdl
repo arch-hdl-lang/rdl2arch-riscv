@@ -1,0 +1,50 @@
+// CLINT fixture — single-hart baseline matching the SiFive layout:
+//
+//   0x0000  msip         — 32-bit, bit 0 is the pending flag; SW writes it
+//                          to raise a machine-mode software interrupt.
+//   0x4000  mtimecmp_lo  — low 32 bits of the 64-bit comparator.
+//   0x4004  mtimecmp_hi  — high 32 bits.
+//   0xBFF8  mtime_lo     — low 32 bits of the shared 64-bit timer.
+//   0xBFFC  mtime_hi     — high 32 bits.
+//
+// The `riscv_intr_clint_role` UDP on each reg tells the CLINT emitter
+// which role the reg plays — the layout itself is plain RDL that the
+// generic `rdl2arch` turns into an AXI4-Lite / APB4 register block.
+//
+// Multi-hart adds more msip (at 0x0000 + hart·4) and mtimecmp
+// (at 0x4000 + hart·8) entries; v1 of the CLINT generator ships with
+// 1 hart to keep the fixture readable.
+
+addrmap clint {
+    reg {
+        riscv_intr_clint_role = "msip";
+        field { sw = rw; hw = r; reset = 0x0; } value[0:0];
+        field { sw = r;  hw = r; reset = 0x0; } reserved[31:1];
+    } msip @ 0x0000;
+
+    reg {
+        riscv_intr_clint_role = "mtimecmp_lo";
+        field { sw = rw; hw = r; reset = 0xFFFFFFFF; } v[31:0];
+    } mtimecmp_lo @ 0x4000;
+
+    reg {
+        riscv_intr_clint_role = "mtimecmp_hi";
+        field { sw = rw; hw = r; reset = 0xFFFFFFFF; } v[31:0];
+    } mtimecmp_hi @ 0x4004;
+
+    reg {
+        // mtime: hw drives the increment every cycle the pipeline's
+        // `mtime_tick` input is high. Keep sw=rw — the RISC-V spec lets
+        // M-mode software set the counter (e.g. at boot to sync cores).
+        // In the CSR file the `hw = rw` semantic lets hwif_in override
+        // on normal cycles and the sw path takes precedence when a
+        // store lands the same cycle.
+        riscv_intr_clint_role = "mtime_lo";
+        field { sw = rw; hw = rw; reset = 0x0; } v[31:0];
+    } mtime_lo @ 0xBFF8;
+
+    reg {
+        riscv_intr_clint_role = "mtime_hi";
+        field { sw = rw; hw = rw; reset = 0x0; } v[31:0];
+    } mtime_hi @ 0xBFFC;
+};

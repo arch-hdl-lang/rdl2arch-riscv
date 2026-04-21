@@ -1,0 +1,22 @@
+use ClintPkg;
+
+module ClintLogic
+  port clk:        in Clock<SysDomain>;
+  port rst:        in Reset<Sync>;
+  port mtime_tick: in Bool;
+  port hwif_out:   in  ClintHwifOut;
+  port hwif_in:    out ClintHwifIn;
+  port msip_out:   out Bool;
+  port mtip_out:   out Bool;
+
+  let mtime:    UInt<64> = {hwif_out.mtime_hi_v, hwif_out.mtime_lo_v};
+  let mtimecmp: UInt<64> = {hwif_out.mtimecmp_hi_v, hwif_out.mtimecmp_lo_v};
+  let next_mtime: UInt<64> = mtime_tick ? (mtime +% 64'h1) : mtime;
+
+  comb
+    hwif_in.mtime_lo_v = next_mtime[31:0];
+    hwif_in.mtime_hi_v = next_mtime[63:32];
+    msip_out = hwif_out.msip_value != 1'h0;
+    mtip_out = mtime >= mtimecmp;
+  end comb
+end module ClintLogic
