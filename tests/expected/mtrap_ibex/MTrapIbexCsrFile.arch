@@ -16,6 +16,8 @@ module MTrapIbexCsrFile
   reg mtval_r: MtvalReg reset rst => MtvalReg { tval: 0 };
   reg mscratch_r: MscratchReg reset rst => MscratchReg { value: 0 };
   reg mstatus_r: MstatusReg reset rst => MstatusReg { wpri_lo: 0, reserved_2_1: 0, mie: 0, reserved_6_4: 0, mpie: 0, reserved_10_8: 0, mpp: 0, wpri_hi: 0 };
+  reg mie_r: MieReg reset rst => MieReg { wpri_0_0: 0, wpri_2_1: 0, msie: 0, wpri_6_4: 0, mtie: 0, wpri_10_8: 0, meie: 0, wpri_15_12: 0, mfie_0: 0, wpri_hi: 0 };
+  reg mip_r: MipReg reset rst => MipReg { wpri_0_0: 0, wpri_2_1: 0, msip: 0, wpri_6_4: 0, mtip: 0, wpri_10_8: 0, meip: 0, wpri_15_12: 0, mfip_0: 0, wpri_hi: 0 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
@@ -25,6 +27,8 @@ module MTrapIbexCsrFile
     12'h343 => mtval_r.tval,
     12'h340 => mscratch_r.value,
     12'h300 => {19'h0, mstatus_r.mpp, 3'h0, mstatus_r.mpie, 3'h0, mstatus_r.mie, 2'h0, false},
+    12'h304 => {15'h0, mie_r.mfie_0, 4'h0, mie_r.meie, 3'h0, mie_r.mtie, 3'h0, mie_r.msie, 2'h0, false},
+    12'h344 => {15'h0, mip_r.mfip_0, 4'h0, mip_r.meip, 3'h0, mip_r.mtip, 3'h0, mip_r.msip, 2'h0, false},
     _ => 0
   end match;
 
@@ -39,6 +43,22 @@ module MTrapIbexCsrFile
     mstatus_r.reserved_10_8 <= hwif_in.mstatus_reserved_10_8;
     mstatus_r.mpp <= hwif_in.mstatus_mpp;
     mstatus_r.wpri_hi <= hwif_in.mstatus_wpri_hi;
+    mie_r.wpri_0_0 <= hwif_in.mie_wpri_0_0;
+    mie_r.wpri_2_1 <= hwif_in.mie_wpri_2_1;
+    mie_r.wpri_6_4 <= hwif_in.mie_wpri_6_4;
+    mie_r.wpri_10_8 <= hwif_in.mie_wpri_10_8;
+    mie_r.wpri_15_12 <= hwif_in.mie_wpri_15_12;
+    mie_r.wpri_hi <= hwif_in.mie_wpri_hi;
+    mip_r.wpri_0_0 <= hwif_in.mip_wpri_0_0;
+    mip_r.wpri_2_1 <= hwif_in.mip_wpri_2_1;
+    mip_r.msip <= hwif_in.mip_msip;
+    mip_r.wpri_6_4 <= hwif_in.mip_wpri_6_4;
+    mip_r.mtip <= hwif_in.mip_mtip;
+    mip_r.wpri_10_8 <= hwif_in.mip_wpri_10_8;
+    mip_r.meip <= hwif_in.mip_meip;
+    mip_r.wpri_15_12 <= hwif_in.mip_wpri_15_12;
+    mip_r.mfip_0 <= hwif_in.mip_mfip_0;
+    mip_r.wpri_hi <= hwif_in.mip_wpri_hi;
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
         if csr.cmd_addr == 12'h305
@@ -111,6 +131,32 @@ module MTrapIbexCsrFile
               _    => mstatus_r.mpp
             end match) & 2'h3;
         end if
+        if csr.cmd_addr == 12'h304
+          mie_r.msie <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[3],
+              2'b10 => mie_r.msie | csr.cmd_wdata[3],
+              2'b11 => mie_r.msie & (~csr.cmd_wdata[3]),
+              _    => mie_r.msie
+            end match;
+          mie_r.mtie <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[7],
+              2'b10 => mie_r.mtie | csr.cmd_wdata[7],
+              2'b11 => mie_r.mtie & (~csr.cmd_wdata[7]),
+              _    => mie_r.mtie
+            end match;
+          mie_r.meie <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[11],
+              2'b10 => mie_r.meie | csr.cmd_wdata[11],
+              2'b11 => mie_r.meie & (~csr.cmd_wdata[11]),
+              _    => mie_r.meie
+            end match;
+          mie_r.mfie_0 <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[16],
+              2'b10 => mie_r.mfie_0 | csr.cmd_wdata[16],
+              2'b11 => mie_r.mfie_0 & (~csr.cmd_wdata[16]),
+              _    => mie_r.mfie_0
+            end match;
+        end if
       end if
     end if
   end seq
@@ -129,6 +175,10 @@ module MTrapIbexCsrFile
     hwif_out.mstatus_mie = mstatus_r.mie;
     hwif_out.mstatus_mpie = mstatus_r.mpie;
     hwif_out.mstatus_mpp = mstatus_r.mpp;
+    hwif_out.mie_msie = mie_r.msie;
+    hwif_out.mie_mtie = mie_r.mtie;
+    hwif_out.mie_meie = mie_r.meie;
+    hwif_out.mie_mfie_0 = mie_r.mfie_0;
   end comb
 
 end module MTrapIbexCsrFile

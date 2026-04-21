@@ -23,5 +23,21 @@ module MTrapIbexCsrTrapCoord
     hwif_in_drive.mstatus_reserved_10_8 = hwif_in_live.mstatus_reserved_10_8;
     hwif_in_drive.mstatus_mpp = trap_enter ? save_mstatus_mpp : hwif_in_live.mstatus_mpp;
     hwif_in_drive.mstatus_wpri_hi = hwif_in_live.mstatus_wpri_hi;
+    hwif_in_drive.mie_wpri_0_0 = hwif_in_live.mie_wpri_0_0;
+    hwif_in_drive.mie_wpri_2_1 = hwif_in_live.mie_wpri_2_1;
+    hwif_in_drive.mie_wpri_6_4 = hwif_in_live.mie_wpri_6_4;
+    hwif_in_drive.mie_wpri_10_8 = hwif_in_live.mie_wpri_10_8;
+    hwif_in_drive.mie_wpri_15_12 = hwif_in_live.mie_wpri_15_12;
+    hwif_in_drive.mie_wpri_hi = hwif_in_live.mie_wpri_hi;
+    hwif_in_drive.mip_wpri_0_0 = hwif_in_live.mip_wpri_0_0;
+    hwif_in_drive.mip_wpri_2_1 = hwif_in_live.mip_wpri_2_1;
+    hwif_in_drive.mip_msip = hwif_in_live.mip_msip;
+    hwif_in_drive.mip_wpri_6_4 = hwif_in_live.mip_wpri_6_4;
+    hwif_in_drive.mip_mtip = hwif_in_live.mip_mtip;
+    hwif_in_drive.mip_wpri_10_8 = hwif_in_live.mip_wpri_10_8;
+    hwif_in_drive.mip_meip = hwif_in_live.mip_meip;
+    hwif_in_drive.mip_wpri_15_12 = hwif_in_live.mip_wpri_15_12;
+    hwif_in_drive.mip_mfip_0 = hwif_in_live.mip_mfip_0;
+    hwif_in_drive.mip_wpri_hi = hwif_in_live.mip_wpri_hi;
   end comb
 end module MTrapIbexCsrTrapCoord

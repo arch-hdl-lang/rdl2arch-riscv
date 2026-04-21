@@ -16,8 +16,18 @@
 //                                 mprv / tw aren't wired in our
 //                                 M-only SoC so they stay absent
 //                                 from the fixture.)
-//   6.5e — + mie/mip             (mip is combinational mirror of
-//                                 live IRQ lines)
+//   6.5e — + mie / mip           (SW-writable interrupt enable
+//                                 bits; mip bits are HW-driven
+//                                 mirrors of the CLINT / PLIC
+//                                 irq lines. For the Ibex
+//                                 controller's combinational
+//                                 `irqs_o = mip & mie` path, the
+//                                 adapter taps live irq_* wires +
+//                                 `hwif_out.mie_*` directly —
+//                                 SW-observable mip storage is
+//                                 1-cycle lagged, which is fine
+//                                 for `csrr t0, mip` inside a
+//                                 handler.)
 //
 // Anything not yet in this fixture stays on Ibex's native path inside
 // the forked `ibex_cs_registers_hybrid.sv`.
@@ -98,4 +108,52 @@ addrmap m_trap_ibex {
         riscv_csr_addr = 0x340;
         field { sw = rw; hw = r; reset = 0x0; } value[31:0];
     } mscratch @ 0x14;
+
+    reg {
+        // mie — SW-written interrupt enables. HW never writes, so
+        // the adapter doesn't need a hwif_in drive for these fields;
+        // our CsrFile stores whatever SW last wrote.
+        //
+        // We model only the bits the Ibex controller checks in our
+        // SoC: MSIE (3), MTIE (7), MEIE (11), and the fast-IRQ 0 bit
+        // (16) — that's the one we wired PLIC context-1 to in
+        // Phase 6.4. Upper fast bits (17-30) plus the S-mode slots
+        // aren't used, so they're WPRI.
+        riscv_csr_addr = 0x304;
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_0_0[0:0];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_2_1[2:1];
+        field { sw = rw; hw = r; reset = 0x0; } msie[3:3];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_6_4[6:4];
+        field { sw = rw; hw = r; reset = 0x0; } mtie[7:7];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_10_8[10:8];
+        field { sw = rw; hw = r; reset = 0x0; } meie[11:11];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_15_12[15:12];
+        field { sw = rw; hw = r; reset = 0x0; } mfie_0[16:16];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:17];
+    } mie @ 0x1C;
+
+    reg {
+        // mip — HW-driven pending bits. SW reads only (per the
+        // standard M-mode interpretation — clearing is done by the
+        // source device: CLINT.mtimecmp write for MTIP, PLIC claim
+        // for MEIP, CLINT.msip write for MSIP).
+        //
+        // The adapter drives `hwif_in.mip_*` from the live irq_*_i
+        // module inputs every cycle, so SW reads see a one-cycle-
+        // lagged mirror. For the Ibex *controller's* trap-decision
+        // path (`irqs_o = mip & mie_q` upstream), the adapter taps
+        // irq_*_i directly — no storage in the middle — so the
+        // trap-take latency matches upstream exactly.
+        riscv_csr_addr = 0x344;
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_0_0[0:0];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_2_1[2:1];
+        field { sw = r; hw = w; reset = 0x0; } msip[3:3];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_6_4[6:4];
+        field { sw = r; hw = w; reset = 0x0; } mtip[7:7];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_10_8[10:8];
+        field { sw = r; hw = w; reset = 0x0; } meip[11:11];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_15_12[15:12];
+        field { sw = r; hw = w; reset = 0x0; } mfip_0[16:16];
+        field { sw = r; hw = w; reset = 0x0; riscv_wpri = true; } wpri_hi[31:17];
+    } mip @ 0x20;
 };
