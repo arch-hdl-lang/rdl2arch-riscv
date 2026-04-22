@@ -83,6 +83,16 @@ module MTrapIbexRiscvTop
     hwif_live_w.dcsr_ebreakvu = 0;
     hwif_live_w.dcsr_ebreakvs = 0;
     hwif_live_w.dcsr_reserved_27_18 = 0;
+    hwif_live_w.mhpmevent3_value = 0;
+    hwif_live_w.mhpmevent4_value = 0;
+    hwif_live_w.mhpmevent5_value = 0;
+    hwif_live_w.mhpmevent6_value = 0;
+    hwif_live_w.mhpmevent7_value = 0;
+    hwif_live_w.mhpmevent8_value = 0;
+    hwif_live_w.mhpmevent9_value = 0;
+    hwif_live_w.mhpmevent10_value = 0;
+    hwif_live_w.mhpmevent11_value = 0;
+    hwif_live_w.mhpmevent12_value = 0;
 
     cmd_op_w = csr_opcode[1:0];
     csr_cmd_ready = cmd_ready_w;
