@@ -154,7 +154,13 @@ def emit_csr_file(design: CsrDesignModel) -> str:
     lines.append("")
     lines.append(f"module {design.module_name}")
     lines.append("  port clk: in Clock<SysDomain>;")
-    lines.append("  port rst: in Reset<Sync>;")
+    # Active-low async reset. RISC-V cores we integrate with (Ibex,
+    # CVA6, etc.) gate their core clock during reset — a sync reset
+    # would never latch non-zero reset values because the clock
+    # doesn't tick while rst is asserted. Async-low also matches
+    # Ibex's `rst_ni` convention so the adapter passes the raw
+    # signal without inversion.
+    lines.append("  port rst: in Reset<Async, Low>;")
     lines.append(f"  port csr: target {design.csr_file_bus};")
     lines.append("  port granted: in Bool;")
 

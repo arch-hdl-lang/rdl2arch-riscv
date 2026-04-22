@@ -2,7 +2,7 @@ use MTrapIbexCsrFilePkg;
 
 module MTrapIbexCsrTrapCoord
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port trap_enter: in Bool;
   port xret_enter: in Bool;
   port save_mepc_epc: in UInt<32>;
@@ -61,15 +61,5 @@ module MTrapIbexCsrTrapCoord
     hwif_in_drive.dcsr_ebreakvu = hwif_in_live.dcsr_ebreakvu;
     hwif_in_drive.dcsr_ebreakvs = hwif_in_live.dcsr_ebreakvs;
     hwif_in_drive.dcsr_reserved_27_18 = hwif_in_live.dcsr_reserved_27_18;
-    hwif_in_drive.mhpmevent3_value = hwif_in_live.mhpmevent3_value;
-    hwif_in_drive.mhpmevent4_value = hwif_in_live.mhpmevent4_value;
-    hwif_in_drive.mhpmevent5_value = hwif_in_live.mhpmevent5_value;
-    hwif_in_drive.mhpmevent6_value = hwif_in_live.mhpmevent6_value;
-    hwif_in_drive.mhpmevent7_value = hwif_in_live.mhpmevent7_value;
-    hwif_in_drive.mhpmevent8_value = hwif_in_live.mhpmevent8_value;
-    hwif_in_drive.mhpmevent9_value = hwif_in_live.mhpmevent9_value;
-    hwif_in_drive.mhpmevent10_value = hwif_in_live.mhpmevent10_value;
-    hwif_in_drive.mhpmevent11_value = hwif_in_live.mhpmevent11_value;
-    hwif_in_drive.mhpmevent12_value = hwif_in_live.mhpmevent12_value;
   end comb
 end module MTrapIbexCsrTrapCoord

@@ -109,7 +109,7 @@ def emit_integrated_top(design: CsrDesignModel) -> str:
     lines.append("")
     lines.append(f"module {top}")
     lines.append("  port clk: in Clock<SysDomain>;")
-    lines.append("  port rst: in Reset<Sync>;")
+    lines.append("  port rst: in Reset<Async, Low>;")
     lines.append("")
     # Pipeline-facing cmd handshake (flat for test driveability — the
     # downstream CSR file's bus port is bound per-field from these).
