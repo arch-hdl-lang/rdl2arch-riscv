@@ -2,7 +2,7 @@ use PrivOverrideCsrFilePkg;
 
 module PrivOverrideCsrTrapCoord
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port trap_enter: in Bool;
   port xret_enter: in Bool;
   port hwif_in_live:  in  PrivOverrideCsrFileHwifIn;

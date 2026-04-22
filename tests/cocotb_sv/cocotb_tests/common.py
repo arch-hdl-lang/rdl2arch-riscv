@@ -22,10 +22,11 @@ async def setup(dut):
     """Start clock, apply reset, init driver, return driver."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     drv = CsrPipelineDriver(dut)
-    dut.rst.value = 1
+    # Active-low async reset: 0 asserts, 1 releases.
+    dut.rst.value = 0
     await drv.init()
     for _ in range(3):
         await RisingEdge(dut.clk)
-    dut.rst.value = 0
+    dut.rst.value = 1
     await RisingEdge(dut.clk)
     return drv

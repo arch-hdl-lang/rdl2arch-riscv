@@ -36,6 +36,7 @@ def test_ibex_mini_soc_lints(
         "-Wno-WIDTHEXPAND",    # $readmemh vs. sized vectors — benign
         "-Wno-IMPORTSTAR",     # arch-com emits `import Pkg::*;` at $unit
         "-Wno-DECLFILENAME",   # our in-tree Ibex forks keep upstream module names
+        "-Wno-SYNCASYNCNET",   # our CsrFile/CLINT/PLIC are async-low; Ibex RAM is sync — same rst pin both ways
         "--unroll-count", "72",  # required by prim_secded per Verilator#1266
         "-f", str(vc_path),
         "--top-module", "ibex_mini_soc",

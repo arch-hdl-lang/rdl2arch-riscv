@@ -2,7 +2,7 @@ use PrivOverrideCsrFilePkg;
 
 module PrivOverrideCsrFile
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port csr: target PrivOverrideCsrFileBus;
   port granted: in Bool;
   port hwif_in:  in PrivOverrideCsrFileHwifIn;

@@ -2,10 +2,20 @@ use MTrapIbexCsrFilePkg;
 
 module MTrapIbexCsrFile
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port csr: target MTrapIbexCsrFileBus;
   port granted: in Bool;
   port cycle_en: in Bool;
+  port hpm10_inc_en: in Bool;
+  port hpm11_inc_en: in Bool;
+  port hpm12_inc_en: in Bool;
+  port hpm3_inc_en: in Bool;
+  port hpm4_inc_en: in Bool;
+  port hpm5_inc_en: in Bool;
+  port hpm6_inc_en: in Bool;
+  port hpm7_inc_en: in Bool;
+  port hpm8_inc_en: in Bool;
+  port hpm9_inc_en: in Bool;
   port hwif_in:  in MTrapIbexCsrFileHwifIn;
   port hwif_out: out MTrapIbexCsrFileHwifOut;
 
@@ -26,6 +36,36 @@ module MTrapIbexCsrFile
   reg dpc_r: DpcReg reset rst => DpcReg { dpc: 0 };
   reg dscratch0_r: Dscratch0Reg reset rst => Dscratch0Reg { value: 0 };
   reg dscratch1_r: Dscratch1Reg reset rst => Dscratch1Reg { value: 0 };
+  reg mhpmcounter3_r: Mhpmcounter3Reg reset rst => Mhpmcounter3Reg { value: 0 };
+  reg mhpmcounter4_r: Mhpmcounter4Reg reset rst => Mhpmcounter4Reg { value: 0 };
+  reg mhpmcounter5_r: Mhpmcounter5Reg reset rst => Mhpmcounter5Reg { value: 0 };
+  reg mhpmcounter6_r: Mhpmcounter6Reg reset rst => Mhpmcounter6Reg { value: 0 };
+  reg mhpmcounter7_r: Mhpmcounter7Reg reset rst => Mhpmcounter7Reg { value: 0 };
+  reg mhpmcounter8_r: Mhpmcounter8Reg reset rst => Mhpmcounter8Reg { value: 0 };
+  reg mhpmcounter9_r: Mhpmcounter9Reg reset rst => Mhpmcounter9Reg { value: 0 };
+  reg mhpmcounter10_r: Mhpmcounter10Reg reset rst => Mhpmcounter10Reg { value: 0 };
+  reg mhpmcounter11_r: Mhpmcounter11Reg reset rst => Mhpmcounter11Reg { value: 0 };
+  reg mhpmcounter12_r: Mhpmcounter12Reg reset rst => Mhpmcounter12Reg { value: 0 };
+  reg mhpmcounter3h_r: Mhpmcounter3hReg reset rst => Mhpmcounter3hReg { value: 0 };
+  reg mhpmcounter4h_r: Mhpmcounter4hReg reset rst => Mhpmcounter4hReg { value: 0 };
+  reg mhpmcounter5h_r: Mhpmcounter5hReg reset rst => Mhpmcounter5hReg { value: 0 };
+  reg mhpmcounter6h_r: Mhpmcounter6hReg reset rst => Mhpmcounter6hReg { value: 0 };
+  reg mhpmcounter7h_r: Mhpmcounter7hReg reset rst => Mhpmcounter7hReg { value: 0 };
+  reg mhpmcounter8h_r: Mhpmcounter8hReg reset rst => Mhpmcounter8hReg { value: 0 };
+  reg mhpmcounter9h_r: Mhpmcounter9hReg reset rst => Mhpmcounter9hReg { value: 0 };
+  reg mhpmcounter10h_r: Mhpmcounter10hReg reset rst => Mhpmcounter10hReg { value: 0 };
+  reg mhpmcounter11h_r: Mhpmcounter11hReg reset rst => Mhpmcounter11hReg { value: 0 };
+  reg mhpmcounter12h_r: Mhpmcounter12hReg reset rst => Mhpmcounter12hReg { value: 0 };
+  reg mhpmevent3_r: Mhpmevent3Reg reset rst => Mhpmevent3Reg { value: 1 };
+  reg mhpmevent4_r: Mhpmevent4Reg reset rst => Mhpmevent4Reg { value: 2 };
+  reg mhpmevent5_r: Mhpmevent5Reg reset rst => Mhpmevent5Reg { value: 4 };
+  reg mhpmevent6_r: Mhpmevent6Reg reset rst => Mhpmevent6Reg { value: 8 };
+  reg mhpmevent7_r: Mhpmevent7Reg reset rst => Mhpmevent7Reg { value: 16 };
+  reg mhpmevent8_r: Mhpmevent8Reg reset rst => Mhpmevent8Reg { value: 32 };
+  reg mhpmevent9_r: Mhpmevent9Reg reset rst => Mhpmevent9Reg { value: 64 };
+  reg mhpmevent10_r: Mhpmevent10Reg reset rst => Mhpmevent10Reg { value: 128 };
+  reg mhpmevent11_r: Mhpmevent11Reg reset rst => Mhpmevent11Reg { value: 256 };
+  reg mhpmevent12_r: Mhpmevent12Reg reset rst => Mhpmevent12Reg { value: 512 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
@@ -44,6 +84,36 @@ module MTrapIbexCsrFile
     12'h7b1 => dpc_r.dpc,
     12'h7b2 => dscratch0_r.value,
     12'h7b3 => dscratch1_r.value,
+    12'hb03 => mhpmcounter3_r.value,
+    12'hb04 => mhpmcounter4_r.value,
+    12'hb05 => mhpmcounter5_r.value,
+    12'hb06 => mhpmcounter6_r.value,
+    12'hb07 => mhpmcounter7_r.value,
+    12'hb08 => mhpmcounter8_r.value,
+    12'hb09 => mhpmcounter9_r.value,
+    12'hb0a => mhpmcounter10_r.value,
+    12'hb0b => mhpmcounter11_r.value,
+    12'hb0c => mhpmcounter12_r.value,
+    12'hb83 => mhpmcounter3h_r.value,
+    12'hb84 => mhpmcounter4h_r.value,
+    12'hb85 => mhpmcounter5h_r.value,
+    12'hb86 => mhpmcounter6h_r.value,
+    12'hb87 => mhpmcounter7h_r.value,
+    12'hb88 => mhpmcounter8h_r.value,
+    12'hb89 => mhpmcounter9h_r.value,
+    12'hb8a => mhpmcounter10h_r.value,
+    12'hb8b => mhpmcounter11h_r.value,
+    12'hb8c => mhpmcounter12h_r.value,
+    12'h323 => mhpmevent3_r.value,
+    12'h324 => mhpmevent4_r.value,
+    12'h325 => mhpmevent5_r.value,
+    12'h326 => mhpmevent6_r.value,
+    12'h327 => mhpmevent7_r.value,
+    12'h328 => mhpmevent8_r.value,
+    12'h329 => mhpmevent9_r.value,
+    12'h32a => mhpmevent10_r.value,
+    12'h32b => mhpmevent11_r.value,
+    12'h32c => mhpmevent12_r.value,
     _ => 0
   end match;
 
@@ -93,6 +163,66 @@ module MTrapIbexCsrFile
     end if
     if cycle_en and (mcycle_r.value == 32'hffffffff)
       mcycleh_r.value <= mcycleh_r.value +% 1;
+    end if
+    if hpm3_inc_en
+      mhpmcounter3_r.value <= mhpmcounter3_r.value +% 1;
+    end if
+    if hpm4_inc_en
+      mhpmcounter4_r.value <= mhpmcounter4_r.value +% 1;
+    end if
+    if hpm5_inc_en
+      mhpmcounter5_r.value <= mhpmcounter5_r.value +% 1;
+    end if
+    if hpm6_inc_en
+      mhpmcounter6_r.value <= mhpmcounter6_r.value +% 1;
+    end if
+    if hpm7_inc_en
+      mhpmcounter7_r.value <= mhpmcounter7_r.value +% 1;
+    end if
+    if hpm8_inc_en
+      mhpmcounter8_r.value <= mhpmcounter8_r.value +% 1;
+    end if
+    if hpm9_inc_en
+      mhpmcounter9_r.value <= mhpmcounter9_r.value +% 1;
+    end if
+    if hpm10_inc_en
+      mhpmcounter10_r.value <= mhpmcounter10_r.value +% 1;
+    end if
+    if hpm11_inc_en
+      mhpmcounter11_r.value <= mhpmcounter11_r.value +% 1;
+    end if
+    if hpm12_inc_en
+      mhpmcounter12_r.value <= mhpmcounter12_r.value +% 1;
+    end if
+    if hpm3_inc_en and (mhpmcounter3_r.value == 32'hffffffff)
+      mhpmcounter3h_r.value <= mhpmcounter3h_r.value +% 1;
+    end if
+    if hpm4_inc_en and (mhpmcounter4_r.value == 32'hffffffff)
+      mhpmcounter4h_r.value <= mhpmcounter4h_r.value +% 1;
+    end if
+    if hpm5_inc_en and (mhpmcounter5_r.value == 32'hffffffff)
+      mhpmcounter5h_r.value <= mhpmcounter5h_r.value +% 1;
+    end if
+    if hpm6_inc_en and (mhpmcounter6_r.value == 32'hffffffff)
+      mhpmcounter6h_r.value <= mhpmcounter6h_r.value +% 1;
+    end if
+    if hpm7_inc_en and (mhpmcounter7_r.value == 32'hffffffff)
+      mhpmcounter7h_r.value <= mhpmcounter7h_r.value +% 1;
+    end if
+    if hpm8_inc_en and (mhpmcounter8_r.value == 32'hffffffff)
+      mhpmcounter8h_r.value <= mhpmcounter8h_r.value +% 1;
+    end if
+    if hpm9_inc_en and (mhpmcounter9_r.value == 32'hffffffff)
+      mhpmcounter9h_r.value <= mhpmcounter9h_r.value +% 1;
+    end if
+    if hpm10_inc_en and (mhpmcounter10_r.value == 32'hffffffff)
+      mhpmcounter10h_r.value <= mhpmcounter10h_r.value +% 1;
+    end if
+    if hpm11_inc_en and (mhpmcounter11_r.value == 32'hffffffff)
+      mhpmcounter11h_r.value <= mhpmcounter11h_r.value +% 1;
+    end if
+    if hpm12_inc_en and (mhpmcounter12_r.value == 32'hffffffff)
+      mhpmcounter12h_r.value <= mhpmcounter12h_r.value +% 1;
     end if
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
@@ -282,6 +412,166 @@ module MTrapIbexCsrFile
               _    => dscratch1_r.value
             end match;
         end if
+        if csr.cmd_addr == 12'hb03
+          mhpmcounter3_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter3_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter3_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter3_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb04
+          mhpmcounter4_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter4_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter4_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter4_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb05
+          mhpmcounter5_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter5_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter5_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter5_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb06
+          mhpmcounter6_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter6_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter6_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter6_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb07
+          mhpmcounter7_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter7_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter7_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter7_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb08
+          mhpmcounter8_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter8_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter8_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter8_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb09
+          mhpmcounter9_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter9_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter9_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter9_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb0a
+          mhpmcounter10_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter10_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter10_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter10_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb0b
+          mhpmcounter11_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter11_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter11_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter11_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb0c
+          mhpmcounter12_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter12_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter12_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter12_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb83
+          mhpmcounter3h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter3h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter3h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter3h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb84
+          mhpmcounter4h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter4h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter4h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter4h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb85
+          mhpmcounter5h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter5h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter5h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter5h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb86
+          mhpmcounter6h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter6h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter6h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter6h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb87
+          mhpmcounter7h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter7h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter7h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter7h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb88
+          mhpmcounter8h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter8h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter8h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter8h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb89
+          mhpmcounter9h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter9h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter9h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter9h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb8a
+          mhpmcounter10h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter10h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter10h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter10h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb8b
+          mhpmcounter11h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter11h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter11h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter11h_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb8c
+          mhpmcounter12h_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mhpmcounter12h_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mhpmcounter12h_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mhpmcounter12h_r.value
+            end match;
+        end if
       end if
     end if
   end seq
@@ -332,6 +622,66 @@ module MTrapIbexCsrFile
     hwif_out.dscratch0_rdata_flat = dscratch0_r.value;
     hwif_out.dscratch1_value = dscratch1_r.value;
     hwif_out.dscratch1_rdata_flat = dscratch1_r.value;
+    hwif_out.mhpmcounter3_value = mhpmcounter3_r.value;
+    hwif_out.mhpmcounter3_rdata_flat = mhpmcounter3_r.value;
+    hwif_out.mhpmcounter4_value = mhpmcounter4_r.value;
+    hwif_out.mhpmcounter4_rdata_flat = mhpmcounter4_r.value;
+    hwif_out.mhpmcounter5_value = mhpmcounter5_r.value;
+    hwif_out.mhpmcounter5_rdata_flat = mhpmcounter5_r.value;
+    hwif_out.mhpmcounter6_value = mhpmcounter6_r.value;
+    hwif_out.mhpmcounter6_rdata_flat = mhpmcounter6_r.value;
+    hwif_out.mhpmcounter7_value = mhpmcounter7_r.value;
+    hwif_out.mhpmcounter7_rdata_flat = mhpmcounter7_r.value;
+    hwif_out.mhpmcounter8_value = mhpmcounter8_r.value;
+    hwif_out.mhpmcounter8_rdata_flat = mhpmcounter8_r.value;
+    hwif_out.mhpmcounter9_value = mhpmcounter9_r.value;
+    hwif_out.mhpmcounter9_rdata_flat = mhpmcounter9_r.value;
+    hwif_out.mhpmcounter10_value = mhpmcounter10_r.value;
+    hwif_out.mhpmcounter10_rdata_flat = mhpmcounter10_r.value;
+    hwif_out.mhpmcounter11_value = mhpmcounter11_r.value;
+    hwif_out.mhpmcounter11_rdata_flat = mhpmcounter11_r.value;
+    hwif_out.mhpmcounter12_value = mhpmcounter12_r.value;
+    hwif_out.mhpmcounter12_rdata_flat = mhpmcounter12_r.value;
+    hwif_out.mhpmcounter3h_value = mhpmcounter3h_r.value;
+    hwif_out.mhpmcounter3h_rdata_flat = mhpmcounter3h_r.value;
+    hwif_out.mhpmcounter4h_value = mhpmcounter4h_r.value;
+    hwif_out.mhpmcounter4h_rdata_flat = mhpmcounter4h_r.value;
+    hwif_out.mhpmcounter5h_value = mhpmcounter5h_r.value;
+    hwif_out.mhpmcounter5h_rdata_flat = mhpmcounter5h_r.value;
+    hwif_out.mhpmcounter6h_value = mhpmcounter6h_r.value;
+    hwif_out.mhpmcounter6h_rdata_flat = mhpmcounter6h_r.value;
+    hwif_out.mhpmcounter7h_value = mhpmcounter7h_r.value;
+    hwif_out.mhpmcounter7h_rdata_flat = mhpmcounter7h_r.value;
+    hwif_out.mhpmcounter8h_value = mhpmcounter8h_r.value;
+    hwif_out.mhpmcounter8h_rdata_flat = mhpmcounter8h_r.value;
+    hwif_out.mhpmcounter9h_value = mhpmcounter9h_r.value;
+    hwif_out.mhpmcounter9h_rdata_flat = mhpmcounter9h_r.value;
+    hwif_out.mhpmcounter10h_value = mhpmcounter10h_r.value;
+    hwif_out.mhpmcounter10h_rdata_flat = mhpmcounter10h_r.value;
+    hwif_out.mhpmcounter11h_value = mhpmcounter11h_r.value;
+    hwif_out.mhpmcounter11h_rdata_flat = mhpmcounter11h_r.value;
+    hwif_out.mhpmcounter12h_value = mhpmcounter12h_r.value;
+    hwif_out.mhpmcounter12h_rdata_flat = mhpmcounter12h_r.value;
+    hwif_out.mhpmevent3_value = mhpmevent3_r.value;
+    hwif_out.mhpmevent3_rdata_flat = mhpmevent3_r.value;
+    hwif_out.mhpmevent4_value = mhpmevent4_r.value;
+    hwif_out.mhpmevent4_rdata_flat = mhpmevent4_r.value;
+    hwif_out.mhpmevent5_value = mhpmevent5_r.value;
+    hwif_out.mhpmevent5_rdata_flat = mhpmevent5_r.value;
+    hwif_out.mhpmevent6_value = mhpmevent6_r.value;
+    hwif_out.mhpmevent6_rdata_flat = mhpmevent6_r.value;
+    hwif_out.mhpmevent7_value = mhpmevent7_r.value;
+    hwif_out.mhpmevent7_rdata_flat = mhpmevent7_r.value;
+    hwif_out.mhpmevent8_value = mhpmevent8_r.value;
+    hwif_out.mhpmevent8_rdata_flat = mhpmevent8_r.value;
+    hwif_out.mhpmevent9_value = mhpmevent9_r.value;
+    hwif_out.mhpmevent9_rdata_flat = mhpmevent9_r.value;
+    hwif_out.mhpmevent10_value = mhpmevent10_r.value;
+    hwif_out.mhpmevent10_rdata_flat = mhpmevent10_r.value;
+    hwif_out.mhpmevent11_value = mhpmevent11_r.value;
+    hwif_out.mhpmevent11_rdata_flat = mhpmevent11_r.value;
+    hwif_out.mhpmevent12_value = mhpmevent12_r.value;
+    hwif_out.mhpmevent12_rdata_flat = mhpmevent12_r.value;
   end comb
 
 end module MTrapIbexCsrFile

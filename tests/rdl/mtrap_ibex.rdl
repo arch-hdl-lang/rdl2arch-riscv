@@ -73,6 +73,21 @@
 //                                 on decode) stays in the adapter
 //                                 — it's address-decoding, not
 //                                 storage.)
+//   6.8  — + mhpmcounter3..12 / mhpmcounter3h..12h / mhpmevent3..12
+//                                (HPM counter block for our
+//                                 `MHPMCounterNum=10` Ibex config.
+//                                 Counter pairs use the same
+//                                 `riscv_hw_increment_when` /
+//                                 `riscv_hw_increment_high_of` UDPs
+//                                 as mcycle/mcycleh from 6.6b;
+//                                 each counter N has its own
+//                                 enable port `hpm<N>_inc_en` wired
+//                                 in the adapter to `mhpmcounter_incr[N]
+//                                 & ~mcountinhibit[N]`. `mhpmevent<N>`
+//                                 are `sw=r;hw=r` RO constants with
+//                                 reset `1 << (N - 3)` — matching
+//                                 Ibex's hardwired event-selector
+//                                 encoding.)
 //
 // Anything not yet in this fixture stays on Ibex's native path inside
 // the forked `ibex_cs_registers_hybrid.sv`.
@@ -334,4 +349,224 @@ addrmap m_trap_ibex {
         riscv_csr_addr = 0x7B3;
         field { sw = rw; hw = r; reset = 0x0; } value[31:0];
     } dscratch1 @ 0x3C;
+
+    reg {
+        // mhpmcounter3 — event counter: dside_wait (cycles waiting for data memory).
+        riscv_csr_addr = 0xB03;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm3_inc_en"; } value[31:0];
+    } mhpmcounter3 @ 0x40;
+
+    reg {
+        // mhpmcounter3h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB83;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter3"; } value[31:0];
+    } mhpmcounter3h @ 0x68;
+
+    reg {
+        // mhpmevent3 — RO selector; reads 0x1
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x323;
+        field { sw = r; hw = r; reset = 0x1; } value[31:0];
+    } mhpmevent3 @ 0x90;
+
+    reg {
+        // mhpmcounter4 — event counter: iside_wait (cycles waiting for instruction fetches).
+        riscv_csr_addr = 0xB04;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm4_inc_en"; } value[31:0];
+    } mhpmcounter4 @ 0x44;
+
+    reg {
+        // mhpmcounter4h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB84;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter4"; } value[31:0];
+    } mhpmcounter4h @ 0x6C;
+
+    reg {
+        // mhpmevent4 — RO selector; reads 0x2
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x324;
+        field { sw = r; hw = r; reset = 0x2; } value[31:0];
+    } mhpmevent4 @ 0x94;
+
+    reg {
+        // mhpmcounter5 — event counter: mem_load (number of loads).
+        riscv_csr_addr = 0xB05;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm5_inc_en"; } value[31:0];
+    } mhpmcounter5 @ 0x48;
+
+    reg {
+        // mhpmcounter5h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB85;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter5"; } value[31:0];
+    } mhpmcounter5h @ 0x70;
+
+    reg {
+        // mhpmevent5 — RO selector; reads 0x4
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x325;
+        field { sw = r; hw = r; reset = 0x4; } value[31:0];
+    } mhpmevent5 @ 0x98;
+
+    reg {
+        // mhpmcounter6 — event counter: mem_store (number of stores).
+        riscv_csr_addr = 0xB06;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm6_inc_en"; } value[31:0];
+    } mhpmcounter6 @ 0x4C;
+
+    reg {
+        // mhpmcounter6h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB86;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter6"; } value[31:0];
+    } mhpmcounter6h @ 0x74;
+
+    reg {
+        // mhpmevent6 — RO selector; reads 0x8
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x326;
+        field { sw = r; hw = r; reset = 0x8; } value[31:0];
+    } mhpmevent6 @ 0x9C;
+
+    reg {
+        // mhpmcounter7 — event counter: jump (unconditional jumps).
+        riscv_csr_addr = 0xB07;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm7_inc_en"; } value[31:0];
+    } mhpmcounter7 @ 0x50;
+
+    reg {
+        // mhpmcounter7h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB87;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter7"; } value[31:0];
+    } mhpmcounter7h @ 0x78;
+
+    reg {
+        // mhpmevent7 — RO selector; reads 0x10
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x327;
+        field { sw = r; hw = r; reset = 0x10; } value[31:0];
+    } mhpmevent7 @ 0xA0;
+
+    reg {
+        // mhpmcounter8 — event counter: branch (conditional branches).
+        riscv_csr_addr = 0xB08;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm8_inc_en"; } value[31:0];
+    } mhpmcounter8 @ 0x54;
+
+    reg {
+        // mhpmcounter8h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB88;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter8"; } value[31:0];
+    } mhpmcounter8h @ 0x7C;
+
+    reg {
+        // mhpmevent8 — RO selector; reads 0x20
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x328;
+        field { sw = r; hw = r; reset = 0x20; } value[31:0];
+    } mhpmevent8 @ 0xA4;
+
+    reg {
+        // mhpmcounter9 — event counter: branch_taken (taken conditional branches).
+        riscv_csr_addr = 0xB09;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm9_inc_en"; } value[31:0];
+    } mhpmcounter9 @ 0x58;
+
+    reg {
+        // mhpmcounter9h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB89;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter9"; } value[31:0];
+    } mhpmcounter9h @ 0x80;
+
+    reg {
+        // mhpmevent9 — RO selector; reads 0x40
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x329;
+        field { sw = r; hw = r; reset = 0x40; } value[31:0];
+    } mhpmevent9 @ 0xA8;
+
+    reg {
+        // mhpmcounter10 — event counter: instr_ret_compressed (compressed instructions retired).
+        riscv_csr_addr = 0xB0A;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm10_inc_en"; } value[31:0];
+    } mhpmcounter10 @ 0x5C;
+
+    reg {
+        // mhpmcounter10h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB8A;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter10"; } value[31:0];
+    } mhpmcounter10h @ 0x84;
+
+    reg {
+        // mhpmevent10 — RO selector; reads 0x80
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x32A;
+        field { sw = r; hw = r; reset = 0x80; } value[31:0];
+    } mhpmevent10 @ 0xAC;
+
+    reg {
+        // mhpmcounter11 — event counter: mul_wait (cycles waiting for multiply).
+        riscv_csr_addr = 0xB0B;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm11_inc_en"; } value[31:0];
+    } mhpmcounter11 @ 0x60;
+
+    reg {
+        // mhpmcounter11h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB8B;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter11"; } value[31:0];
+    } mhpmcounter11h @ 0x88;
+
+    reg {
+        // mhpmevent11 — RO selector; reads 0x100
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x32B;
+        field { sw = r; hw = r; reset = 0x100; } value[31:0];
+    } mhpmevent11 @ 0xB0;
+
+    reg {
+        // mhpmcounter12 — event counter: div_wait (cycles waiting for divide).
+        riscv_csr_addr = 0xB0C;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "hpm12_inc_en"; } value[31:0];
+    } mhpmcounter12 @ 0x64;
+
+    reg {
+        // mhpmcounter12h — high half, links via
+        // `riscv_hw_increment_high_of`.
+        riscv_csr_addr = 0xB8C;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mhpmcounter12"; } value[31:0];
+    } mhpmcounter12h @ 0x8C;
+
+    reg {
+        // mhpmevent12 — RO selector; reads 0x200
+        // (Ibex hardwires event = 1 << (counter_idx - 3)).
+        riscv_csr_addr = 0x32C;
+        field { sw = r; hw = r; reset = 0x200; } value[31:0];
+    } mhpmevent12 @ 0xB4;
 };

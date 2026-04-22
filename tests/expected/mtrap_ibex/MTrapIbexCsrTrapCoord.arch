@@ -2,7 +2,7 @@ use MTrapIbexCsrFilePkg;
 
 module MTrapIbexCsrTrapCoord
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port trap_enter: in Bool;
   port xret_enter: in Bool;
   port save_mepc_epc: in UInt<32>;

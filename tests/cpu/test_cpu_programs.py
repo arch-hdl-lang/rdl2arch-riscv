@@ -80,6 +80,10 @@ PROGRAMS: list[CpuProgram] = [
         name="debug_csrs_csrfile",
         cocotb_module="test_debug_csrs_csrfile",
     ),
+    CpuProgram(
+        name="hpm_csrs_csrfile",
+        cocotb_module="test_hpm_csrs_csrfile",
+    ),
 ]
 
 
@@ -231,6 +235,13 @@ def verilator_runner(
             "-Wno-UNUSEDPARAM",
             "-Wno-PINMISSING",
             "-Wno-WIDTHEXPAND",
+            # Our CsrFile / CLINT / PLIC now use Async, Low reset
+            # (matches Ibex's rst_ni). Ibex's RAMs in the shared tree
+            # still sample rst sync, so the same top-level IO_RST_N
+            # legitimately goes into both sync and async flop
+            # domains. A real SoC has a reset controller; our sim
+            # flow is fine mixing them.
+            "-Wno-SYNCASYNCNET",
             "-Wno-fatal",
         ],
     )
