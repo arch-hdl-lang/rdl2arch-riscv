@@ -325,13 +325,17 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   irqs_t       mip;
   logic [31:0] mip_rsp_rdata;
   // END rdl2arch
-  dcsr_t       dcsr_q, dcsr_d;
-  logic        dcsr_en;
-  logic [31:0] depc_q, depc_d;
-  logic        depc_en;
-  logic [31:0] dscratch0_q;
-  logic [31:0] dscratch1_q;
-  logic        dscratch0_en, dscratch1_en;
+  // BEGIN rdl2arch (Phase 6.7): dcsr / dpc / dscratch0 / dscratch1
+  // storage migrated to our CsrFile. Upstream's `_q`/`_d`/`_en`
+  // signals + `u_{dcsr,depc,dscratch0,dscratch1}_csr` instances
+  // are gone. The bus-side rsp-rdata wires feed the unified read
+  // case arms below. The `dret` path that previously read
+  // `dcsr_q.prv` now reads `ourfile_hwif_out.dcsr_prv` instead.
+  logic [31:0] dcsr_rsp_rdata;
+  logic [31:0] depc_rsp_rdata;
+  logic [31:0] dscratch0_rsp_rdata;
+  logic [31:0] dscratch1_rsp_rdata;
+  // END rdl2arch
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -566,20 +570,23 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       CSR_PMPADDR14: csr_rdata_int = pmp_addr_rdata[14];
       CSR_PMPADDR15: csr_rdata_int = pmp_addr_rdata[15];
 
+      // Phase-6.7: debug CSR storage moved to our CsrFile. `dbg_csr`
+      // stays address-decoded here — it gates the debug-mode access
+      // check, orthogonal to storage.
       CSR_DCSR: begin
-        csr_rdata_int = dcsr_q;
+        csr_rdata_int = dcsr_rsp_rdata;
         dbg_csr       = 1'b1;
       end
       CSR_DPC: begin
-        csr_rdata_int = depc_q;
+        csr_rdata_int = depc_rsp_rdata;
         dbg_csr       = 1'b1;
       end
       CSR_DSCRATCH0: begin
-        csr_rdata_int = dscratch0_q;
+        csr_rdata_int = dscratch0_rsp_rdata;
         dbg_csr       = 1'b1;
       end
       CSR_DSCRATCH1: begin
-        csr_rdata_int = dscratch1_q;
+        csr_rdata_int = dscratch1_rsp_rdata;
         dbg_csr       = 1'b1;
       end
 
@@ -698,12 +705,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     // mstatus.{mie,mpie,mpp}; mret-restore for mstatus.{mie,mpie,mpp})
     // are driven there through `hwif_in`.
     // END rdl2arch
-    dcsr_en      = 1'b0;
-    dcsr_d       = dcsr_q;
-    depc_d       = {csr_wdata_int[31:1], 1'b0};
-    depc_en      = 1'b0;
-    dscratch0_en = 1'b0;
-    dscratch1_en = 1'b0;
+    // BEGIN rdl2arch (Phase 6.7): dcsr / dpc / dscratch0 / dscratch1
+    // defaults removed — their storage now lives in the CsrFile,
+    // and their SW writes route through the bus mux below.
+    // END rdl2arch
 
     mstack_en      = 1'b0;
     // BEGIN rdl2arch: mstack backup reads the CURRENT mstatus.mpie
@@ -778,38 +783,15 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         CSR_MTVEC: ;
         // END rdl2arch
 
-        CSR_DCSR: begin
-          dcsr_d = csr_wdata_int;
-          dcsr_d.xdebugver = XDEBUGVER_STD;
-          // Change to PRIV_LVL_U if software writes an unsupported value
-          if ((dcsr_d.prv != PRIV_LVL_M) && (dcsr_d.prv != PRIV_LVL_U)) begin
-            dcsr_d.prv = PRIV_LVL_U;
-          end
-
-          // Read-only for SW
-          dcsr_d.cause = dcsr_q.cause;
-
-          // Interrupts always disabled during single stepping
-          dcsr_d.stepie = 1'b0;
-
-          // currently not supported:
-          dcsr_d.nmip = 1'b0;
-          dcsr_d.mprven = 1'b0;
-          dcsr_d.stopcount = 1'b0;
-          dcsr_d.stoptime = 1'b0;
-
-          // forced to be zero
-          dcsr_d.zero0 = 1'b0;
-          dcsr_d.zero1 = 1'b0;
-          dcsr_d.zero2 = 12'h0;
-          dcsr_en      = 1'b1;
-        end
-
-        // dpc: debug program counter
-        CSR_DPC: depc_en = 1'b1;
-
-        CSR_DSCRATCH0: dscratch0_en = 1'b1;
-        CSR_DSCRATCH1: dscratch1_en = 1'b1;
+        // Phase-6.7: debug CSR writes route through our CsrFile bus.
+        // The upstream force-fields (xdebugver RO, cause RO-for-SW,
+        // stepie/nmip/mprven/stopcount/stoptime forced 0, zero0/1/2
+        // WPRI, prv WARL {U, M}) are all expressed in the RDL
+        // fixture — generator handles them correctly.
+        CSR_DCSR:      ;
+        CSR_DPC:       ;
+        CSR_DSCRATCH0: ;
+        CSR_DSCRATCH1: ;
 
         // machine counter/timers — mcountinhibit writes go through our
         // CsrFile; no write-enable pulse needed on this side.
@@ -874,13 +856,16 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         priv_lvl_d = PRIV_LVL_M;
 
         if (debug_csr_save_i) begin
-          // all interrupts are masked
-          // do not update cause, epc, tval, epc and status
-          dcsr_d.prv   = priv_lvl_q;
-          dcsr_d.cause = debug_cause_i;
-          dcsr_en      = 1'b1;
-          depc_d       = exception_pc;
-          depc_en      = 1'b1;
+          // BEGIN rdl2arch (Phase 6.7): dcsr/dpc HW-save-on-debug-
+          // entry path. Our `DbgTriggerEn=0` SoC never enters debug
+          // (no ebreak, debug_req_i tied low), so this branch is
+          // unreachable in practice. When we eventually enable
+          // debug, re-route these writes through the TrapCoord's
+          // save_* ports (like trap-entry does for mstatus/mepc/
+          // mcause/mtval). Kept as an empty branch so the outer
+          // if/else structure is preserved.
+          // END rdl2arch
+          ;
         end else if (!debug_mode_i) begin
           // Exceptions do not update CSRs in debug mode, so ony write these CSRs if we're not in
           // debug mode.
@@ -915,7 +900,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       end // csr_save_cause_i
 
       csr_restore_dret_i: begin // DRET
-        priv_lvl_d = dcsr_q.prv;
+        // rdl2arch: dcsr.prv now lives in our CsrFile; read it via
+        // hwif_out (2-bit logic) and cast to the `priv_lvl_e` enum
+        // Ibex's pipeline expects.
+        priv_lvl_d = priv_lvl_e'(ourfile_hwif_out.dcsr_prv);
       end // csr_restore_dret_i
 
       csr_restore_mret_i: begin // MRET
@@ -982,15 +970,15 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign csr_rdata_o = csr_rdata_int;
 
   // directly output some registers
-  assign csr_depc_o  = depc_q;
   // BEGIN rdl2arch: CSRs backed by the generated CsrFile surface
   // their values through `hwif_out`. mtvec is rebuilt from its
   // {mode, base} split fields to match upstream's 32-bit layout;
-  // mepc/mtval are already flat 32-bit fields.
+  // mepc/mtval/depc are already flat 32-bit fields.
   assign csr_mtvec_o = {ourfile_hwif_out.mtvec_base,
                         ourfile_hwif_out.mtvec_mode};
   assign csr_mepc_o  = ourfile_hwif_out.mepc_epc;
   assign csr_mtval_o = ourfile_hwif_out.mtval_tval;
+  assign csr_depc_o  = ourfile_hwif_out.dpc_dpc;
   // END rdl2arch
 
   // BEGIN rdl2arch: mstatus outputs driven from our CsrFile. `tw`
@@ -1001,9 +989,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign csr_mstatus_mie_o   = ourfile_hwif_out.mstatus_mie;
   assign csr_mstatus_tw_o    = 1'b0;
   // END rdl2arch
-  assign debug_single_step_o = dcsr_q.step;
-  assign debug_ebreakm_o     = dcsr_q.ebreakm;
-  assign debug_ebreaku_o     = dcsr_q.ebreaku;
+  // Phase-6.7: dcsr.{step, ebreakm, ebreaku} now tapped via hwif_out.
+  assign debug_single_step_o = ourfile_hwif_out.dcsr_step;
+  assign debug_ebreakm_o     = ourfile_hwif_out.dcsr_ebreakm;
+  assign debug_ebreaku_o     = ourfile_hwif_out.dcsr_ebreaku;
 
   // Qualify incoming interrupt requests in mip CSR with mie CSR for controller and to re-enable
   // clock upon WFI (must be purely combinational).
@@ -1067,67 +1056,13 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // mepc/mcause/mtval go through `MTrapIbexCsrTrapCoord`.
   // END rdl2arch
 
-  // DCSR
-  localparam dcsr_t DCSR_RESET_VAL = '{
-      xdebugver: XDEBUGVER_STD,
-      cause: DBG_CAUSE_NONE,  // 3'h0
-      prv: PRIV_LVL_M,
-      default: '0
-  };
-  ibex_csr #(
-    .Width     ($bits(dcsr_t)),
-    .ShadowCopy(1'b0),
-    .ResetValue({DCSR_RESET_VAL})
-  ) u_dcsr_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i ({dcsr_d}),
-    .wr_en_i   (dcsr_en),
-    .rd_data_o (dcsr_q),
-    .rd_error_o()
-  );
-
-  // DEPC
-  ibex_csr #(
-    .Width     (32),
-    .ShadowCopy(1'b0),
-    .ResetValue('0)
-  ) u_depc_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i (depc_d),
-    .wr_en_i   (depc_en),
-    .rd_data_o (depc_q),
-    .rd_error_o()
-  );
-
-  // DSCRATCH0
-  ibex_csr #(
-    .Width     (32),
-    .ShadowCopy(1'b0),
-    .ResetValue('0)
-  ) u_dscratch0_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
-    .wr_en_i   (dscratch0_en),
-    .rd_data_o (dscratch0_q),
-    .rd_error_o()
-  );
-
-  // DSCRATCH1
-  ibex_csr #(
-    .Width     (32),
-    .ShadowCopy(1'b0),
-    .ResetValue('0)
-  ) u_dscratch1_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
-    .wr_en_i   (dscratch1_en),
-    .rd_data_o (dscratch1_q),
-    .rd_error_o()
-  );
+  // BEGIN rdl2arch (Phase 6.7): DCSR / DPC / DSCRATCH0 / DSCRATCH1
+  // storage migrated to our CsrFile. The four `ibex_csr` instances
+  // upstream had are removed; reset values + WARL/WPRI semantics
+  // are expressed in `tests/rdl/mtrap_ibex.rdl` instead. The
+  // downstream references (`dret`'s `dcsr_q.prv` read) now tap
+  // `ourfile_hwif_out.dcsr_prv` via the name-mangled member.
+  // END rdl2arch
 
   // MSTACK
   localparam status_stk_t MSTACK_RESET_VAL = '{mpie: 1'b1, mpp: PRIV_LVL_U};
@@ -1844,7 +1779,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
                            | (csr_addr_i == CSR_MIP)
                            | (csr_addr_i == CSR_MCOUNTINHIBIT)
                            | (csr_addr_i == CSR_MCYCLE)
-                           | (csr_addr_i == CSR_MCYCLEH);
+                           | (csr_addr_i == CSR_MCYCLEH)
+                           | (csr_addr_i == CSR_DCSR)
+                           | (csr_addr_i == CSR_DPC)
+                           | (csr_addr_i == CSR_DSCRATCH0)
+                           | (csr_addr_i == CSR_DSCRATCH1);
 
   // SW-side cmd.
   //
@@ -1894,6 +1833,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign mcountinhibit_rsp_rdata = ourfile_rsp_rdata;
   assign mcycle_rsp_rdata   = ourfile_rsp_rdata;
   assign mcycleh_rsp_rdata  = ourfile_rsp_rdata;
+  assign dcsr_rsp_rdata      = ourfile_rsp_rdata;
+  assign depc_rsp_rdata      = ourfile_rsp_rdata;
+  assign dscratch0_rsp_rdata = ourfile_rsp_rdata;
+  assign dscratch1_rsp_rdata = ourfile_rsp_rdata;
 
   // ── HW save + restore path ────────────────────────────────────
   //
@@ -1981,6 +1924,26 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // be tied to 0 for read-as-zero.
   assign ourfile_hwif_in_live.mcountinhibit_reserved_tm = '0;
   assign ourfile_hwif_in_live.mcountinhibit_reserved_hi = '0;
+
+  // ── dcsr WPRI + HW-written-by-spec drives ────────────────────
+  // All of these are `sw=r; hw=w` in the RDL. Most are WPRI
+  // (read-as-zero, writes discarded); `cause` and `nmip` are
+  // functionally HW-written on debug entry but our DbgTriggerEn=0
+  // SoC never triggers that path, so we tie them to 0 — which
+  // matches upstream's "forced to 0" for `cause`/`nmip` in all
+  // observable cases.
+  assign ourfile_hwif_in_live.dcsr_nmip           = '0;
+  assign ourfile_hwif_in_live.dcsr_mprven         = '0;
+  assign ourfile_hwif_in_live.dcsr_reserved_5     = '0;
+  assign ourfile_hwif_in_live.dcsr_cause          = '0;
+  assign ourfile_hwif_in_live.dcsr_stoptime       = '0;
+  assign ourfile_hwif_in_live.dcsr_stopcount      = '0;
+  assign ourfile_hwif_in_live.dcsr_stepie         = '0;
+  assign ourfile_hwif_in_live.dcsr_ebreaks        = '0;
+  assign ourfile_hwif_in_live.dcsr_reserved_14    = '0;
+  assign ourfile_hwif_in_live.dcsr_ebreakvu       = '0;
+  assign ourfile_hwif_in_live.dcsr_ebreakvs       = '0;
+  assign ourfile_hwif_in_live.dcsr_reserved_27_18 = '0;
 
   // Encode Ibex's packed `exc_cause_t` into our CsrFile's flat
   // 32-bit mcause shape. Same layout upstream had in its read path:

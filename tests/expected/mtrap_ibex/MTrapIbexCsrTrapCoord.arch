@@ -49,5 +49,17 @@ module MTrapIbexCsrTrapCoord
     hwif_in_drive.mip_wpri_hi = hwif_in_live.mip_wpri_hi;
     hwif_in_drive.mcountinhibit_reserved_tm = hwif_in_live.mcountinhibit_reserved_tm;
     hwif_in_drive.mcountinhibit_reserved_hi = hwif_in_live.mcountinhibit_reserved_hi;
+    hwif_in_drive.dcsr_nmip = hwif_in_live.dcsr_nmip;
+    hwif_in_drive.dcsr_mprven = hwif_in_live.dcsr_mprven;
+    hwif_in_drive.dcsr_reserved_5 = hwif_in_live.dcsr_reserved_5;
+    hwif_in_drive.dcsr_cause = hwif_in_live.dcsr_cause;
+    hwif_in_drive.dcsr_stoptime = hwif_in_live.dcsr_stoptime;
+    hwif_in_drive.dcsr_stopcount = hwif_in_live.dcsr_stopcount;
+    hwif_in_drive.dcsr_stepie = hwif_in_live.dcsr_stepie;
+    hwif_in_drive.dcsr_ebreaks = hwif_in_live.dcsr_ebreaks;
+    hwif_in_drive.dcsr_reserved_14 = hwif_in_live.dcsr_reserved_14;
+    hwif_in_drive.dcsr_ebreakvu = hwif_in_live.dcsr_ebreakvu;
+    hwif_in_drive.dcsr_ebreakvs = hwif_in_live.dcsr_ebreakvs;
+    hwif_in_drive.dcsr_reserved_27_18 = hwif_in_live.dcsr_reserved_27_18;
   end comb
 end module MTrapIbexCsrTrapCoord

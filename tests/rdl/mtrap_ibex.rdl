@@ -57,6 +57,22 @@
 //                                 optimization — pipeline-specific
 //                                 and doesn't belong in the
 //                                 generator.)
+//   6.7  — + dcsr / dpc / dscratch0 / dscratch1
+//                                (the four M-mode debug CSRs that
+//                                 Ibex always instantiates. In our
+//                                 `DbgTriggerEn=0` build the debug
+//                                 trigger regs stay absent and no
+//                                 HW debug-entry happens, so the
+//                                 fields are modelled as SW-RW
+//                                 storage with spec-correct WPRI +
+//                                 WARL. dcsr.prv is WARL {0 (U),
+//                                 3 (M)} — SW writes of 1/2
+//                                 legalize to 0, matching Ibex.
+//                                 The debug-mode access check
+//                                 (`dbg_csr` flag upstream raises
+//                                 on decode) stays in the adapter
+//                                 — it's address-decoding, not
+//                                 storage.)
 //
 // Anything not yet in this fixture stays on Ibex's native path inside
 // the forked `ibex_cs_registers_hybrid.sv`.
@@ -248,4 +264,74 @@ addrmap m_trap_ibex {
         field { sw = rw; hw = r; reset = 0x0;
                 riscv_hw_increment_high_of = "mcycle"; } value[31:0];
     } mcycleh @ 0x2C;
+
+    reg {
+        // dcsr — Debug Control and Status Register (CSR 0x7B0).
+        //
+        // Spec layout (RISC-V Debug Spec 0.13.2, M-only slice):
+        //   [31:28] xdebugver   — RO const 0x4 (spec version).
+        //   [27:18] reserved    — WPRI.
+        //   [17:16] ebreakvs/vu — H-ext not present; WPRI.
+        //   [15]    ebreakm     — SW RW.
+        //   [14]    reserved    — WPRI.
+        //   [13]    ebreaks     — S-mode not present; WPRI.
+        //   [12]    ebreaku     — SW RW.
+        //   [11]    stepie      — Ibex forces 0; WPRI.
+        //   [10]    stopcount   — Ibex forces 0; WPRI.
+        //   [9]     stoptime    — Ibex forces 0; WPRI.
+        //   [8:6]   cause       — RO for SW; HW-written on debug
+        //                         entry (never happens in our
+        //                         DbgTriggerEn=0 build, so storage
+        //                         holds its reset 0).
+        //   [5]     reserved    — WPRI.
+        //   [4]     mprven      — Ibex forces 0; WPRI.
+        //   [3]     nmip        — RO for SW; HW-driven.
+        //   [2]     step        — SW RW.
+        //   [1:0]   prv         — WARL {0 (U), 3 (M)}. Resets to 3
+        //                         (matches Ibex's DCSR_RESET_VAL so
+        //                         the `dret` path's `priv_lvl_d <=
+        //                         dcsr_q.prv` reads M at cold-boot).
+        //                         SW writes of 1 or 2 legalize to 0.
+        riscv_csr_addr = 0x7B0;
+        field { sw = rw; hw = r; reset = 0x3;
+                riscv_warl = "0,3"; } prv[1:0];
+        field { sw = rw; hw = r; reset = 0x0; } step[2:2];
+        field { sw = r;  hw = w; reset = 0x0; } nmip[3:3];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } mprven[4:4];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } reserved_5[5:5];
+        field { sw = r;  hw = w; reset = 0x0; } cause[8:6];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } stoptime[9:9];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } stopcount[10:10];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } stepie[11:11];
+        field { sw = rw; hw = r; reset = 0x0; } ebreaku[12:12];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } ebreaks[13:13];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } reserved_14[14:14];
+        field { sw = rw; hw = r; reset = 0x0; } ebreakm[15:15];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } ebreakvu[16:16];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } ebreakvs[17:17];
+        field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } reserved_27_18[27:18];
+        field { sw = r;  hw = r; reset = 0x4; } xdebugver[31:28];
+    } dcsr @ 0x30;
+
+    reg {
+        // dpc — Debug Program Counter (CSR 0x7B1). Low bit zero
+        // (IALIGN=32) like mepc. Ibex never writes it in our
+        // DbgTriggerEn=0 build, so `hw = r` and no save-on-entry
+        // tag — only SW reads / writes.
+        riscv_csr_addr = 0x7B1;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_warl = "0xFFFFFFFE"; } dpc[31:0];
+    } dpc @ 0x34;
+
+    reg {
+        // dscratch0 / dscratch1 — Plain RW scratch for the debugger.
+        // Nothing touches them on the HW side in our build.
+        riscv_csr_addr = 0x7B2;
+        field { sw = rw; hw = r; reset = 0x0; } value[31:0];
+    } dscratch0 @ 0x38;
+
+    reg {
+        riscv_csr_addr = 0x7B3;
+        field { sw = rw; hw = r; reset = 0x0; } value[31:0];
+    } dscratch1 @ 0x3C;
 };

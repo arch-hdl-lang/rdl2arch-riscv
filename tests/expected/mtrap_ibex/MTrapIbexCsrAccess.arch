@@ -19,6 +19,10 @@ module MTrapIbexCsrAccess
     12'h320 => 2'b11,
     12'hb00 => 2'b11,
     12'hb80 => 2'b11,
+    12'h7b0 => 2'b11,
+    12'h7b1 => 2'b11,
+    12'h7b2 => 2'b11,
+    12'h7b3 => 2'b11,
     _       => csr_addr[9:8]
   end match;
   let is_ro:     Bool = (csr_addr[11:10] == 2'b11);
