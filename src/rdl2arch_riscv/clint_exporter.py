@@ -24,7 +24,7 @@ from typing import Optional, Type, Union
 
 from systemrdl.node import AddrmapNode, RootNode
 
-from rdl2arch import ArchExporter
+from rdl2arch import ArchExporter, ResetStyle
 from rdl2arch.cpuif.base import CpuifBase
 from rdl2arch.cpuif.axi4lite import AXI4Lite_Cpuif
 
@@ -61,11 +61,16 @@ class RiscvClintExporter:
         os.makedirs(output_dir, exist_ok=True)
 
         # (1) Delegate the register block to the generic rdl2arch exporter.
+        # Async-low reset matches the rest of the rdl2arch-riscv stack
+        # (CsrFile / TrapCoord) + Ibex's `rst_ni` convention, so the
+        # whole SoC presents a single reset shape and doesn't need
+        # per-device polarity inversions at the wiring level.
         rb_files = ArchExporter().export(
             top, output_dir,
             cpuif_cls=cpuif_cls,
             module_name=mod,
             package_name=pkg,
+            reset_style=ResetStyle.ASYNC_LOW,
         )
 
         # (2) Scan + emit the sibling logic module.

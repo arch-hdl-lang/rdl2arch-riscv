@@ -32,7 +32,7 @@ import subprocess
 import pytest
 
 from conftest import RDL_DIR
-from sim.driver import CsrPipelineDriver, reset_async_low as reset, tick
+from sim.driver import CsrPipelineDriver, reset, tick
 from sim.harness import fresh_dut
 
 

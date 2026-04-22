@@ -2,7 +2,7 @@ use PlicPkg;
 
 module PlicLogic
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port source_in: in UInt<9>;
   port hwif_out:  in  PlicHwifOut;
   port hwif_in:   out PlicHwifIn;

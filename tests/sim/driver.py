@@ -39,22 +39,10 @@ def tick(dut) -> None:
 
 
 def reset(dut, cycles: int = 3) -> None:
-    """Active-high sync reset — matches the shape emitted by upstream
-    rdl2arch for register blocks (Clint / PlicMultictx / PlicBasic).
-    Assert `rst` to 1 for N cycles, then deassert to 0."""
-    dut.rst = 1
-    for _ in range(cycles):
-        tick(dut)
-    dut.rst = 0
-    tick(dut)
-
-
-def reset_async_low(dut, cycles: int = 3) -> None:
     """Active-low async reset — matches the `port rst: in Reset<Async,
-    Low>` that rdl2arch-riscv emits for CsrFile / CsrTrapCoord /
-    CsrAccess. Assert `rst` to 0 for N cycles, then deassert to 1.
-
-    Async-low matches Ibex's `rst_ni` convention and also sidesteps
+    Low>` that rdl2arch-riscv emits across the stack (CsrFile /
+    TrapCoord / Clint / Plic / their sibling logic modules). Async-low
+    matches Ibex's `rst_ni` convention and sidesteps
     clock-gate-during-reset issues: the reset branch fires on
     `negedge rst`, not on the next posedge clk, so non-zero reset
     values land even when the core clock isn't ticking."""

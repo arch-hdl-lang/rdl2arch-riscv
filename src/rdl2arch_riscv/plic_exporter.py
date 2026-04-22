@@ -24,7 +24,7 @@ from typing import Optional, Type, Union
 
 from systemrdl.node import AddrmapNode, RootNode
 
-from rdl2arch import ArchExporter
+from rdl2arch import ArchExporter, ResetStyle
 from rdl2arch.cpuif.base import CpuifBase
 from rdl2arch.cpuif.axi4lite import AXI4Lite_Cpuif
 
@@ -60,12 +60,15 @@ class RiscvPlicExporter:
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # (1) Register block via generic rdl2arch.
+        # (1) Register block via generic rdl2arch. Async-low reset
+        # matches the rest of the rdl2arch-riscv stack + Ibex's
+        # `rst_ni` — see the same note in `clint_exporter.py`.
         rb_files = ArchExporter().export(
             top, output_dir,
             cpuif_cls=cpuif_cls,
             module_name=mod,
             package_name=pkg,
+            reset_style=ResetStyle.ASYNC_LOW,
         )
 
         # (2) Logic module.

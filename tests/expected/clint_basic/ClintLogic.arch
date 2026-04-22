@@ -2,7 +2,7 @@ use ClintPkg;
 
 module ClintLogic
   port clk:        in Clock<SysDomain>;
-  port rst:        in Reset<Sync>;
+  port rst:        in Reset<Async, Low>;
   port mtime_tick: in Bool;
   port hwif_out:   in  ClintHwifOut;
   port hwif_in:    out ClintHwifIn;

@@ -31,7 +31,7 @@ end bus AxiLite
 
 module Clint
   port clk:      in Clock<SysDomain>;
-  port rst:      in Reset<Sync>;
+  port rst:      in Reset<Async, Low>;
   port s_axi: target AxiLite<ADDR_W=16, DATA_W=32>;
   port hwif_in:  in ClintHwifIn;
   port hwif_out: out ClintHwifOut;

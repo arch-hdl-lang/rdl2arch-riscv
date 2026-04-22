@@ -233,7 +233,7 @@ def emit_plic_logic(model: PlicModel, logic_module_name: str) -> str:
     lines.append("")
     lines.append(f"module {logic_module_name}")
     lines.append("  port clk: in Clock<SysDomain>;")
-    lines.append("  port rst: in Reset<Sync>;")
+    lines.append("  port rst: in Reset<Async, Low>;")
     lines.append(f"  port source_in: in UInt<{n + 1}>;")
     lines.append(f"  port hwif_out:  in  {model.hwif_out_struct};")
     lines.append(f"  port hwif_in:   out {model.hwif_in_struct};")

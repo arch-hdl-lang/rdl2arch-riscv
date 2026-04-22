@@ -2,7 +2,7 @@ use PlicMultictxPkg;
 
 module PlicMultictxLogic
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port source_in: in UInt<9>;
   port hwif_out:  in  PlicMultictxHwifOut;
   port hwif_in:   out PlicMultictxHwifIn;
