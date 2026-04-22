@@ -337,6 +337,43 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   logic [31:0] dscratch1_rsp_rdata;
   // END rdl2arch
 
+  // Phase-6.8: HPM counter block bus-side read wires. `ibex_counter`
+  // instances for Cnt=3..12 are replaced by CsrFile storage; the
+  // `mhpmcounter[Cnt]` and `mhpmevent[Cnt]` internal arrays (below)
+  // are driven from `hwif_out` so RVFI tracing hierarchical refs
+  // still resolve.
+  logic [31:0] mhpmcounter3_rsp_rdata;
+  logic [31:0] mhpmcounter4_rsp_rdata;
+  logic [31:0] mhpmcounter5_rsp_rdata;
+  logic [31:0] mhpmcounter6_rsp_rdata;
+  logic [31:0] mhpmcounter7_rsp_rdata;
+  logic [31:0] mhpmcounter8_rsp_rdata;
+  logic [31:0] mhpmcounter9_rsp_rdata;
+  logic [31:0] mhpmcounter10_rsp_rdata;
+  logic [31:0] mhpmcounter11_rsp_rdata;
+  logic [31:0] mhpmcounter12_rsp_rdata;
+  logic [31:0] mhpmcounter3h_rsp_rdata;
+  logic [31:0] mhpmcounter4h_rsp_rdata;
+  logic [31:0] mhpmcounter5h_rsp_rdata;
+  logic [31:0] mhpmcounter6h_rsp_rdata;
+  logic [31:0] mhpmcounter7h_rsp_rdata;
+  logic [31:0] mhpmcounter8h_rsp_rdata;
+  logic [31:0] mhpmcounter9h_rsp_rdata;
+  logic [31:0] mhpmcounter10h_rsp_rdata;
+  logic [31:0] mhpmcounter11h_rsp_rdata;
+  logic [31:0] mhpmcounter12h_rsp_rdata;
+  logic [31:0] mhpmevent3_rsp_rdata;
+  logic [31:0] mhpmevent4_rsp_rdata;
+  logic [31:0] mhpmevent5_rsp_rdata;
+  logic [31:0] mhpmevent6_rsp_rdata;
+  logic [31:0] mhpmevent7_rsp_rdata;
+  logic [31:0] mhpmevent8_rsp_rdata;
+  logic [31:0] mhpmevent9_rsp_rdata;
+  logic [31:0] mhpmevent10_rsp_rdata;
+  logic [31:0] mhpmevent11_rsp_rdata;
+  logic [31:0] mhpmevent12_rsp_rdata;
+  // END rdl2arch
+
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
   status_stk_t mstack_q, mstack_d;
@@ -592,10 +629,21 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
       // machine counter/timers
       CSR_MCOUNTINHIBIT: csr_rdata_int = mcountinhibit_rsp_rdata;
-      CSR_MHPMEVENT3,
-      CSR_MHPMEVENT4,  CSR_MHPMEVENT5,  CSR_MHPMEVENT6,  CSR_MHPMEVENT7,
-      CSR_MHPMEVENT8,  CSR_MHPMEVENT9,  CSR_MHPMEVENT10, CSR_MHPMEVENT11,
-      CSR_MHPMEVENT12, CSR_MHPMEVENT13, CSR_MHPMEVENT14, CSR_MHPMEVENT15,
+
+      // Phase-6.8: mhpmevent3..12 moved to our CsrFile (RO consts).
+      CSR_MHPMEVENT3:  csr_rdata_int = mhpmevent3_rsp_rdata;
+      CSR_MHPMEVENT4:  csr_rdata_int = mhpmevent4_rsp_rdata;
+      CSR_MHPMEVENT5:  csr_rdata_int = mhpmevent5_rsp_rdata;
+      CSR_MHPMEVENT6:  csr_rdata_int = mhpmevent6_rsp_rdata;
+      CSR_MHPMEVENT7:  csr_rdata_int = mhpmevent7_rsp_rdata;
+      CSR_MHPMEVENT8:  csr_rdata_int = mhpmevent8_rsp_rdata;
+      CSR_MHPMEVENT9:  csr_rdata_int = mhpmevent9_rsp_rdata;
+      CSR_MHPMEVENT10: csr_rdata_int = mhpmevent10_rsp_rdata;
+      CSR_MHPMEVENT11: csr_rdata_int = mhpmevent11_rsp_rdata;
+      CSR_MHPMEVENT12: csr_rdata_int = mhpmevent12_rsp_rdata;
+      // Indices 13..31 still fall through the `mhpmevent[idx]` wire
+      // (stays at 0 — no CsrFile storage for them).
+      CSR_MHPMEVENT13, CSR_MHPMEVENT14, CSR_MHPMEVENT15,
       CSR_MHPMEVENT16, CSR_MHPMEVENT17, CSR_MHPMEVENT18, CSR_MHPMEVENT19,
       CSR_MHPMEVENT20, CSR_MHPMEVENT21, CSR_MHPMEVENT22, CSR_MHPMEVENT23,
       CSR_MHPMEVENT24, CSR_MHPMEVENT25, CSR_MHPMEVENT26, CSR_MHPMEVENT27,
@@ -607,11 +655,20 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
       CSR_MCYCLE:  csr_rdata_int = mcycle_rsp_rdata;
       CSR_MCYCLEH: csr_rdata_int = mcycleh_rsp_rdata;
 
+      // Phase-6.8: mhpmcounter3..12 moved to our CsrFile.
+      CSR_MHPMCOUNTER3:  csr_rdata_int = mhpmcounter3_rsp_rdata;
+      CSR_MHPMCOUNTER4:  csr_rdata_int = mhpmcounter4_rsp_rdata;
+      CSR_MHPMCOUNTER5:  csr_rdata_int = mhpmcounter5_rsp_rdata;
+      CSR_MHPMCOUNTER6:  csr_rdata_int = mhpmcounter6_rsp_rdata;
+      CSR_MHPMCOUNTER7:  csr_rdata_int = mhpmcounter7_rsp_rdata;
+      CSR_MHPMCOUNTER8:  csr_rdata_int = mhpmcounter8_rsp_rdata;
+      CSR_MHPMCOUNTER9:  csr_rdata_int = mhpmcounter9_rsp_rdata;
+      CSR_MHPMCOUNTER10: csr_rdata_int = mhpmcounter10_rsp_rdata;
+      CSR_MHPMCOUNTER11: csr_rdata_int = mhpmcounter11_rsp_rdata;
+      CSR_MHPMCOUNTER12: csr_rdata_int = mhpmcounter12_rsp_rdata;
+
       CSR_MINSTRET,
-      CSR_MHPMCOUNTER3,
-      CSR_MHPMCOUNTER4,  CSR_MHPMCOUNTER5,  CSR_MHPMCOUNTER6,  CSR_MHPMCOUNTER7,
-      CSR_MHPMCOUNTER8,  CSR_MHPMCOUNTER9,  CSR_MHPMCOUNTER10, CSR_MHPMCOUNTER11,
-      CSR_MHPMCOUNTER12, CSR_MHPMCOUNTER13, CSR_MHPMCOUNTER14, CSR_MHPMCOUNTER15,
+      CSR_MHPMCOUNTER13, CSR_MHPMCOUNTER14, CSR_MHPMCOUNTER15,
       CSR_MHPMCOUNTER16, CSR_MHPMCOUNTER17, CSR_MHPMCOUNTER18, CSR_MHPMCOUNTER19,
       CSR_MHPMCOUNTER20, CSR_MHPMCOUNTER21, CSR_MHPMCOUNTER22, CSR_MHPMCOUNTER23,
       CSR_MHPMCOUNTER24, CSR_MHPMCOUNTER25, CSR_MHPMCOUNTER26, CSR_MHPMCOUNTER27,
@@ -619,11 +676,20 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         csr_rdata_int = mhpmcounter[mhpmcounter_idx][31:0];
       end
 
+      // Phase-6.8: mhpmcounter3h..12h moved to our CsrFile.
+      CSR_MHPMCOUNTER3H:  csr_rdata_int = mhpmcounter3h_rsp_rdata;
+      CSR_MHPMCOUNTER4H:  csr_rdata_int = mhpmcounter4h_rsp_rdata;
+      CSR_MHPMCOUNTER5H:  csr_rdata_int = mhpmcounter5h_rsp_rdata;
+      CSR_MHPMCOUNTER6H:  csr_rdata_int = mhpmcounter6h_rsp_rdata;
+      CSR_MHPMCOUNTER7H:  csr_rdata_int = mhpmcounter7h_rsp_rdata;
+      CSR_MHPMCOUNTER8H:  csr_rdata_int = mhpmcounter8h_rsp_rdata;
+      CSR_MHPMCOUNTER9H:  csr_rdata_int = mhpmcounter9h_rsp_rdata;
+      CSR_MHPMCOUNTER10H: csr_rdata_int = mhpmcounter10h_rsp_rdata;
+      CSR_MHPMCOUNTER11H: csr_rdata_int = mhpmcounter11h_rsp_rdata;
+      CSR_MHPMCOUNTER12H: csr_rdata_int = mhpmcounter12h_rsp_rdata;
+
       CSR_MINSTRETH,
-      CSR_MHPMCOUNTER3H,
-      CSR_MHPMCOUNTER4H,  CSR_MHPMCOUNTER5H,  CSR_MHPMCOUNTER6H,  CSR_MHPMCOUNTER7H,
-      CSR_MHPMCOUNTER8H,  CSR_MHPMCOUNTER9H,  CSR_MHPMCOUNTER10H, CSR_MHPMCOUNTER11H,
-      CSR_MHPMCOUNTER12H, CSR_MHPMCOUNTER13H, CSR_MHPMCOUNTER14H, CSR_MHPMCOUNTER15H,
+      CSR_MHPMCOUNTER13H, CSR_MHPMCOUNTER14H, CSR_MHPMCOUNTER15H,
       CSR_MHPMCOUNTER16H, CSR_MHPMCOUNTER17H, CSR_MHPMCOUNTER18H, CSR_MHPMCOUNTER19H,
       CSR_MHPMCOUNTER20H, CSR_MHPMCOUNTER21H, CSR_MHPMCOUNTER22H, CSR_MHPMCOUNTER23H,
       CSR_MHPMCOUNTER24H, CSR_MHPMCOUNTER25H, CSR_MHPMCOUNTER26H, CSR_MHPMCOUNTER27H,
@@ -802,11 +868,21 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         CSR_MCYCLE:  ;
         CSR_MCYCLEH: ;
 
+        // Phase-6.8: mhpmcounter3..12 writes route through our
+        // CsrFile bus; no we pulse here.
+        CSR_MHPMCOUNTER3:  ;
+        CSR_MHPMCOUNTER4:  ;
+        CSR_MHPMCOUNTER5:  ;
+        CSR_MHPMCOUNTER6:  ;
+        CSR_MHPMCOUNTER7:  ;
+        CSR_MHPMCOUNTER8:  ;
+        CSR_MHPMCOUNTER9:  ;
+        CSR_MHPMCOUNTER10: ;
+        CSR_MHPMCOUNTER11: ;
+        CSR_MHPMCOUNTER12: ;
+
         CSR_MINSTRET,
-        CSR_MHPMCOUNTER3,
-        CSR_MHPMCOUNTER4,  CSR_MHPMCOUNTER5,  CSR_MHPMCOUNTER6,  CSR_MHPMCOUNTER7,
-        CSR_MHPMCOUNTER8,  CSR_MHPMCOUNTER9,  CSR_MHPMCOUNTER10, CSR_MHPMCOUNTER11,
-        CSR_MHPMCOUNTER12, CSR_MHPMCOUNTER13, CSR_MHPMCOUNTER14, CSR_MHPMCOUNTER15,
+        CSR_MHPMCOUNTER13, CSR_MHPMCOUNTER14, CSR_MHPMCOUNTER15,
         CSR_MHPMCOUNTER16, CSR_MHPMCOUNTER17, CSR_MHPMCOUNTER18, CSR_MHPMCOUNTER19,
         CSR_MHPMCOUNTER20, CSR_MHPMCOUNTER21, CSR_MHPMCOUNTER22, CSR_MHPMCOUNTER23,
         CSR_MHPMCOUNTER24, CSR_MHPMCOUNTER25, CSR_MHPMCOUNTER26, CSR_MHPMCOUNTER27,
@@ -814,11 +890,21 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
           mhpmcounter_we[mhpmcounter_idx] = 1'b1;
         end
 
+        // Phase-6.8: mhpmcounter3h..12h writes route through our
+        // CsrFile bus.
+        CSR_MHPMCOUNTER3H:  ;
+        CSR_MHPMCOUNTER4H:  ;
+        CSR_MHPMCOUNTER5H:  ;
+        CSR_MHPMCOUNTER6H:  ;
+        CSR_MHPMCOUNTER7H:  ;
+        CSR_MHPMCOUNTER8H:  ;
+        CSR_MHPMCOUNTER9H:  ;
+        CSR_MHPMCOUNTER10H: ;
+        CSR_MHPMCOUNTER11H: ;
+        CSR_MHPMCOUNTER12H: ;
+
         CSR_MINSTRETH,
-        CSR_MHPMCOUNTER3H,
-        CSR_MHPMCOUNTER4H,  CSR_MHPMCOUNTER5H,  CSR_MHPMCOUNTER6H,  CSR_MHPMCOUNTER7H,
-        CSR_MHPMCOUNTER8H,  CSR_MHPMCOUNTER9H,  CSR_MHPMCOUNTER10H, CSR_MHPMCOUNTER11H,
-        CSR_MHPMCOUNTER12H, CSR_MHPMCOUNTER13H, CSR_MHPMCOUNTER14H, CSR_MHPMCOUNTER15H,
+        CSR_MHPMCOUNTER13H, CSR_MHPMCOUNTER14H, CSR_MHPMCOUNTER15H,
         CSR_MHPMCOUNTER16H, CSR_MHPMCOUNTER17H, CSR_MHPMCOUNTER18H, CSR_MHPMCOUNTER19H,
         CSR_MHPMCOUNTER20H, CSR_MHPMCOUNTER21H, CSR_MHPMCOUNTER22H, CSR_MHPMCOUNTER23H,
         CSR_MHPMCOUNTER24H, CSR_MHPMCOUNTER25H, CSR_MHPMCOUNTER26H, CSR_MHPMCOUNTER27H,
@@ -1414,47 +1500,45 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign unused_mhpmcounterh_we_1  = mhpmcounterh_we[1];
   assign unused_mhpmcounter_incr_1 = mhpmcounter_incr[1];
 
-  // Iterate through optionally included counters (MHPMCounterNum controls how many are included)
-  for (genvar i = 0; i < 29; i++) begin : gen_cntrs
-    localparam int Cnt = i + 3;
+  // BEGIN rdl2arch (Phase 6.8): upstream's per-counter ibex_counter
+  // instance (one per Cnt in 3..MHPMCounterNum+2) is replaced by
+  // storage in our CsrFile. The `mhpmcounter[Cnt]` wire is still
+  // referenced by `ibex_core.sv`'s RVFI tracing for Cnt 3..12, so we
+  // drive it combinationally from our `hwif_out.mhpmcounterN{,h}_value`
+  // split-halves. The `_spec_i` priming Ibex used for mhpmcounter[10]
+  // (compressed-instr-retired) isn't consumed by anything our SoC
+  // cares about — tie it to an unused wire so the port drop lints
+  // cleanly.
+  //
+  // For Cnt ≥ MHPMCounterNum+3 the counter isn't implemented — tie
+  // mhpmcounter[Cnt] to 0 (matches upstream's `gen_unimp`).
+  // END rdl2arch
+  logic unused_instr_ret_compressed_spec_i;
+  assign unused_instr_ret_compressed_spec_i = instr_ret_compressed_spec_i;
 
-    if (i < MHPMCounterNum) begin : gen_imp
-      logic [63:0] mhpmcounter_raw, mhpmcounter_next;
-
-      ibex_counter #(
-        .CounterWidth(MHPMCounterWidth),
-        .ProvideValUpd(Cnt == 10)
-      ) mcounters_variable_i (
-        .clk_i(clk_i),
-        .rst_ni(rst_ni),
-        .counter_inc_i(mhpmcounter_incr[Cnt] & ~mcountinhibit[Cnt]),
-        .counterh_we_i(mhpmcounterh_we[Cnt]),
-        .counter_we_i(mhpmcounter_we[Cnt]),
-        .counter_val_i(csr_wdata_int),
-        .counter_val_o(mhpmcounter_raw),
-        .counter_val_upd_o(mhpmcounter_next)
-      );
-
-      if (Cnt == 10) begin : gen_compressed_instr_cnt
-        // Special behaviour for reading compressed instruction retired counter, see comment on
-        // `mhpmcounter[2]` above for further information.
-        assign mhpmcounter[Cnt] =
-          instr_ret_compressed_spec_i & ~mcountinhibit[Cnt] ? mhpmcounter_next:
-                                                              mhpmcounter_raw;
-      end else begin : gen_other_cnts
-        logic [63:0] unused_mhpmcounter_next;
-        // All other counters just see the raw counter value directly.
-        assign mhpmcounter[Cnt] = mhpmcounter_raw;
-        assign unused_mhpmcounter_next = mhpmcounter_next;
-      end
-    end else begin : gen_unimp
-      assign mhpmcounter[Cnt] = '0;
-
-      if (Cnt == 10) begin : gen_no_compressed_instr_cnt
-        logic unused_instr_ret_compressed_spec_i;
-        assign unused_instr_ret_compressed_spec_i = instr_ret_compressed_spec_i;
-      end
-    end
+  assign mhpmcounter[3]  = {ourfile_hwif_out.mhpmcounter3h_value,
+                            ourfile_hwif_out.mhpmcounter3_value};
+  assign mhpmcounter[4]  = {ourfile_hwif_out.mhpmcounter4h_value,
+                            ourfile_hwif_out.mhpmcounter4_value};
+  assign mhpmcounter[5]  = {ourfile_hwif_out.mhpmcounter5h_value,
+                            ourfile_hwif_out.mhpmcounter5_value};
+  assign mhpmcounter[6]  = {ourfile_hwif_out.mhpmcounter6h_value,
+                            ourfile_hwif_out.mhpmcounter6_value};
+  assign mhpmcounter[7]  = {ourfile_hwif_out.mhpmcounter7h_value,
+                            ourfile_hwif_out.mhpmcounter7_value};
+  assign mhpmcounter[8]  = {ourfile_hwif_out.mhpmcounter8h_value,
+                            ourfile_hwif_out.mhpmcounter8_value};
+  assign mhpmcounter[9]  = {ourfile_hwif_out.mhpmcounter9h_value,
+                            ourfile_hwif_out.mhpmcounter9_value};
+  assign mhpmcounter[10] = {ourfile_hwif_out.mhpmcounter10h_value,
+                            ourfile_hwif_out.mhpmcounter10_value};
+  assign mhpmcounter[11] = {ourfile_hwif_out.mhpmcounter11h_value,
+                            ourfile_hwif_out.mhpmcounter11_value};
+  assign mhpmcounter[12] = {ourfile_hwif_out.mhpmcounter12h_value,
+                            ourfile_hwif_out.mhpmcounter12_value};
+  for (genvar i = 10; i < 29; i++) begin : gen_cntrs_unimp
+    localparam int UCnt = i + 3;
+    assign mhpmcounter[UCnt] = '0;
   end
 
   // BEGIN rdl2arch: mcountinhibit now sourced from our CsrFile's
@@ -1783,7 +1867,37 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
                            | (csr_addr_i == CSR_DCSR)
                            | (csr_addr_i == CSR_DPC)
                            | (csr_addr_i == CSR_DSCRATCH0)
-                           | (csr_addr_i == CSR_DSCRATCH1);
+                           | (csr_addr_i == CSR_DSCRATCH1)
+                           | (csr_addr_i == CSR_MHPMCOUNTER3)
+                           | (csr_addr_i == CSR_MHPMCOUNTER4)
+                           | (csr_addr_i == CSR_MHPMCOUNTER5)
+                           | (csr_addr_i == CSR_MHPMCOUNTER6)
+                           | (csr_addr_i == CSR_MHPMCOUNTER7)
+                           | (csr_addr_i == CSR_MHPMCOUNTER8)
+                           | (csr_addr_i == CSR_MHPMCOUNTER9)
+                           | (csr_addr_i == CSR_MHPMCOUNTER10)
+                           | (csr_addr_i == CSR_MHPMCOUNTER11)
+                           | (csr_addr_i == CSR_MHPMCOUNTER12)
+                           | (csr_addr_i == CSR_MHPMCOUNTER3H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER4H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER5H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER6H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER7H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER8H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER9H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER10H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER11H)
+                           | (csr_addr_i == CSR_MHPMCOUNTER12H)
+                           | (csr_addr_i == CSR_MHPMEVENT3)
+                           | (csr_addr_i == CSR_MHPMEVENT4)
+                           | (csr_addr_i == CSR_MHPMEVENT5)
+                           | (csr_addr_i == CSR_MHPMEVENT6)
+                           | (csr_addr_i == CSR_MHPMEVENT7)
+                           | (csr_addr_i == CSR_MHPMEVENT8)
+                           | (csr_addr_i == CSR_MHPMEVENT9)
+                           | (csr_addr_i == CSR_MHPMEVENT10)
+                           | (csr_addr_i == CSR_MHPMEVENT11)
+                           | (csr_addr_i == CSR_MHPMEVENT12);
 
   // SW-side cmd.
   //
@@ -1837,6 +1951,36 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign depc_rsp_rdata      = ourfile_rsp_rdata;
   assign dscratch0_rsp_rdata = ourfile_rsp_rdata;
   assign dscratch1_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmcounter3_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter4_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter5_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter6_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter7_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter8_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter9_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter10_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmcounter11_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmcounter12_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmcounter3h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter4h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter5h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter6h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter7h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter8h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter9h_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmcounter10h_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmcounter11h_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmcounter12h_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmevent3_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent4_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent5_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent6_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent7_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent8_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent9_rsp_rdata  = ourfile_rsp_rdata;
+  assign mhpmevent10_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmevent11_rsp_rdata = ourfile_rsp_rdata;
+  assign mhpmevent12_rsp_rdata = ourfile_rsp_rdata;
 
   // ── HW save + restore path ────────────────────────────────────
   //
@@ -1925,6 +2069,29 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign ourfile_hwif_in_live.mcountinhibit_reserved_tm = '0;
   assign ourfile_hwif_in_live.mcountinhibit_reserved_hi = '0;
 
+  // ── mhpmevent3..12 constant drives ────────────────────────────
+  // Each mhpmeventN is `sw=r;hw=w;reset=0` in the RDL; we drive
+  // hwif_in.mhpmeventN = 1 << (N-3) every cycle, matching Ibex's
+  // hardwired event-selector encoding.
+  //
+  // Note: a `sw=r;hw=r;reset=<const>` encoding would be cleaner
+  // (arch-com emits a reset-time always_ff for orphan-reset regs),
+  // but Ibex's `core_clock_gate_i` in `ibex_top` gates the core
+  // clock off whenever `core_busy | debug_req | irq_pending |
+  // irq_nm` is low — which is exactly during reset. A reset-only
+  // flop never sees a posedge to latch its value. Driving hwif_in
+  // every cycle sidesteps the clock-gate dependency.
+  assign ourfile_hwif_in_live.mhpmevent3_value  = 32'h1;
+  assign ourfile_hwif_in_live.mhpmevent4_value  = 32'h2;
+  assign ourfile_hwif_in_live.mhpmevent5_value  = 32'h4;
+  assign ourfile_hwif_in_live.mhpmevent6_value  = 32'h8;
+  assign ourfile_hwif_in_live.mhpmevent7_value  = 32'h10;
+  assign ourfile_hwif_in_live.mhpmevent8_value  = 32'h20;
+  assign ourfile_hwif_in_live.mhpmevent9_value  = 32'h40;
+  assign ourfile_hwif_in_live.mhpmevent10_value = 32'h80;
+  assign ourfile_hwif_in_live.mhpmevent11_value = 32'h100;
+  assign ourfile_hwif_in_live.mhpmevent12_value = 32'h200;
+
   // ── dcsr WPRI + HW-written-by-spec drives ────────────────────
   // All of these are `sw=r; hw=w` in the RDL. Most are WPRI
   // (read-as-zero, writes discarded); `cause` and `nmip` are
@@ -2003,6 +2170,18 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     // formula: the active-counter event (always high for cycle
     // counting) AND not inhibited via mcountinhibit.cy.
     .cycle_en      (mhpmcounter_incr[0] & ~mcountinhibit[0]),
+    // Phase-6.8: HPM counter increment enables. Same formula
+    // upstream used per-counter: event AND ~inhibit.
+    .hpm3_inc_en   (mhpmcounter_incr[3]  & ~mcountinhibit[3]),
+    .hpm4_inc_en   (mhpmcounter_incr[4]  & ~mcountinhibit[4]),
+    .hpm5_inc_en   (mhpmcounter_incr[5]  & ~mcountinhibit[5]),
+    .hpm6_inc_en   (mhpmcounter_incr[6]  & ~mcountinhibit[6]),
+    .hpm7_inc_en   (mhpmcounter_incr[7]  & ~mcountinhibit[7]),
+    .hpm8_inc_en   (mhpmcounter_incr[8]  & ~mcountinhibit[8]),
+    .hpm9_inc_en   (mhpmcounter_incr[9]  & ~mcountinhibit[9]),
+    .hpm10_inc_en  (mhpmcounter_incr[10] & ~mcountinhibit[10]),
+    .hpm11_inc_en  (mhpmcounter_incr[11] & ~mcountinhibit[11]),
+    .hpm12_inc_en  (mhpmcounter_incr[12] & ~mcountinhibit[12]),
     .hwif_in       (ourfile_hwif_in),
     .hwif_out      (ourfile_hwif_out)
   );

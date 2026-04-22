@@ -80,6 +80,10 @@ PROGRAMS: list[CpuProgram] = [
         name="debug_csrs_csrfile",
         cocotb_module="test_debug_csrs_csrfile",
     ),
+    CpuProgram(
+        name="hpm_csrs_csrfile",
+        cocotb_module="test_hpm_csrs_csrfile",
+    ),
 ]
 
 

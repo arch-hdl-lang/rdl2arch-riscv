@@ -15,7 +15,37 @@ package MTrapIbexCsrFilePkg
     Dcsr,
     Dpc,
     Dscratch0,
-    Dscratch1
+    Dscratch1,
+    Mhpmcounter3,
+    Mhpmcounter4,
+    Mhpmcounter5,
+    Mhpmcounter6,
+    Mhpmcounter7,
+    Mhpmcounter8,
+    Mhpmcounter9,
+    Mhpmcounter10,
+    Mhpmcounter11,
+    Mhpmcounter12,
+    Mhpmcounter3h,
+    Mhpmcounter4h,
+    Mhpmcounter5h,
+    Mhpmcounter6h,
+    Mhpmcounter7h,
+    Mhpmcounter8h,
+    Mhpmcounter9h,
+    Mhpmcounter10h,
+    Mhpmcounter11h,
+    Mhpmcounter12h,
+    Mhpmevent3,
+    Mhpmevent4,
+    Mhpmevent5,
+    Mhpmevent6,
+    Mhpmevent7,
+    Mhpmevent8,
+    Mhpmevent9,
+    Mhpmevent10,
+    Mhpmevent11,
+    Mhpmevent12
   end enum MTrapIbexCsrFileAddr
 
   struct MtvecReg
@@ -124,6 +154,126 @@ package MTrapIbexCsrFilePkg
     value: UInt<32>;
   end struct Dscratch1Reg
 
+  struct Mhpmcounter3Reg
+    value: UInt<32>;
+  end struct Mhpmcounter3Reg
+
+  struct Mhpmcounter4Reg
+    value: UInt<32>;
+  end struct Mhpmcounter4Reg
+
+  struct Mhpmcounter5Reg
+    value: UInt<32>;
+  end struct Mhpmcounter5Reg
+
+  struct Mhpmcounter6Reg
+    value: UInt<32>;
+  end struct Mhpmcounter6Reg
+
+  struct Mhpmcounter7Reg
+    value: UInt<32>;
+  end struct Mhpmcounter7Reg
+
+  struct Mhpmcounter8Reg
+    value: UInt<32>;
+  end struct Mhpmcounter8Reg
+
+  struct Mhpmcounter9Reg
+    value: UInt<32>;
+  end struct Mhpmcounter9Reg
+
+  struct Mhpmcounter10Reg
+    value: UInt<32>;
+  end struct Mhpmcounter10Reg
+
+  struct Mhpmcounter11Reg
+    value: UInt<32>;
+  end struct Mhpmcounter11Reg
+
+  struct Mhpmcounter12Reg
+    value: UInt<32>;
+  end struct Mhpmcounter12Reg
+
+  struct Mhpmcounter3hReg
+    value: UInt<32>;
+  end struct Mhpmcounter3hReg
+
+  struct Mhpmcounter4hReg
+    value: UInt<32>;
+  end struct Mhpmcounter4hReg
+
+  struct Mhpmcounter5hReg
+    value: UInt<32>;
+  end struct Mhpmcounter5hReg
+
+  struct Mhpmcounter6hReg
+    value: UInt<32>;
+  end struct Mhpmcounter6hReg
+
+  struct Mhpmcounter7hReg
+    value: UInt<32>;
+  end struct Mhpmcounter7hReg
+
+  struct Mhpmcounter8hReg
+    value: UInt<32>;
+  end struct Mhpmcounter8hReg
+
+  struct Mhpmcounter9hReg
+    value: UInt<32>;
+  end struct Mhpmcounter9hReg
+
+  struct Mhpmcounter10hReg
+    value: UInt<32>;
+  end struct Mhpmcounter10hReg
+
+  struct Mhpmcounter11hReg
+    value: UInt<32>;
+  end struct Mhpmcounter11hReg
+
+  struct Mhpmcounter12hReg
+    value: UInt<32>;
+  end struct Mhpmcounter12hReg
+
+  struct Mhpmevent3Reg
+    value: UInt<32>;
+  end struct Mhpmevent3Reg
+
+  struct Mhpmevent4Reg
+    value: UInt<32>;
+  end struct Mhpmevent4Reg
+
+  struct Mhpmevent5Reg
+    value: UInt<32>;
+  end struct Mhpmevent5Reg
+
+  struct Mhpmevent6Reg
+    value: UInt<32>;
+  end struct Mhpmevent6Reg
+
+  struct Mhpmevent7Reg
+    value: UInt<32>;
+  end struct Mhpmevent7Reg
+
+  struct Mhpmevent8Reg
+    value: UInt<32>;
+  end struct Mhpmevent8Reg
+
+  struct Mhpmevent9Reg
+    value: UInt<32>;
+  end struct Mhpmevent9Reg
+
+  struct Mhpmevent10Reg
+    value: UInt<32>;
+  end struct Mhpmevent10Reg
+
+  struct Mhpmevent11Reg
+    value: UInt<32>;
+  end struct Mhpmevent11Reg
+
+  struct Mhpmevent12Reg
+    value: UInt<32>;
+  end struct Mhpmevent12Reg
+
   struct MTrapIbexCsrFileHwifIn
     mepc_epc: UInt<32>;
     mcause_cause: UInt<32>;
@@ -165,6 +315,16 @@ package MTrapIbexCsrFilePkg
     dcsr_ebreakvu: UInt<1>;
     dcsr_ebreakvs: UInt<1>;
     dcsr_reserved_27_18: UInt<10>;
+    mhpmevent3_value: UInt<32>;
+    mhpmevent4_value: UInt<32>;
+    mhpmevent5_value: UInt<32>;
+    mhpmevent6_value: UInt<32>;
+    mhpmevent7_value: UInt<32>;
+    mhpmevent8_value: UInt<32>;
+    mhpmevent9_value: UInt<32>;
+    mhpmevent10_value: UInt<32>;
+    mhpmevent11_value: UInt<32>;
+    mhpmevent12_value: UInt<32>;
   end struct MTrapIbexCsrFileHwifIn
 
   struct MTrapIbexCsrFileHwifOut
@@ -210,6 +370,56 @@ package MTrapIbexCsrFilePkg
     dscratch0_rdata_flat: UInt<32>;
     dscratch1_value: UInt<32>;
     dscratch1_rdata_flat: UInt<32>;
+    mhpmcounter3_value: UInt<32>;
+    mhpmcounter3_rdata_flat: UInt<32>;
+    mhpmcounter4_value: UInt<32>;
+    mhpmcounter4_rdata_flat: UInt<32>;
+    mhpmcounter5_value: UInt<32>;
+    mhpmcounter5_rdata_flat: UInt<32>;
+    mhpmcounter6_value: UInt<32>;
+    mhpmcounter6_rdata_flat: UInt<32>;
+    mhpmcounter7_value: UInt<32>;
+    mhpmcounter7_rdata_flat: UInt<32>;
+    mhpmcounter8_value: UInt<32>;
+    mhpmcounter8_rdata_flat: UInt<32>;
+    mhpmcounter9_value: UInt<32>;
+    mhpmcounter9_rdata_flat: UInt<32>;
+    mhpmcounter10_value: UInt<32>;
+    mhpmcounter10_rdata_flat: UInt<32>;
+    mhpmcounter11_value: UInt<32>;
+    mhpmcounter11_rdata_flat: UInt<32>;
+    mhpmcounter12_value: UInt<32>;
+    mhpmcounter12_rdata_flat: UInt<32>;
+    mhpmcounter3h_value: UInt<32>;
+    mhpmcounter3h_rdata_flat: UInt<32>;
+    mhpmcounter4h_value: UInt<32>;
+    mhpmcounter4h_rdata_flat: UInt<32>;
+    mhpmcounter5h_value: UInt<32>;
+    mhpmcounter5h_rdata_flat: UInt<32>;
+    mhpmcounter6h_value: UInt<32>;
+    mhpmcounter6h_rdata_flat: UInt<32>;
+    mhpmcounter7h_value: UInt<32>;
+    mhpmcounter7h_rdata_flat: UInt<32>;
+    mhpmcounter8h_value: UInt<32>;
+    mhpmcounter8h_rdata_flat: UInt<32>;
+    mhpmcounter9h_value: UInt<32>;
+    mhpmcounter9h_rdata_flat: UInt<32>;
+    mhpmcounter10h_value: UInt<32>;
+    mhpmcounter10h_rdata_flat: UInt<32>;
+    mhpmcounter11h_value: UInt<32>;
+    mhpmcounter11h_rdata_flat: UInt<32>;
+    mhpmcounter12h_value: UInt<32>;
+    mhpmcounter12h_rdata_flat: UInt<32>;
+    mhpmevent3_rdata_flat: UInt<32>;
+    mhpmevent4_rdata_flat: UInt<32>;
+    mhpmevent5_rdata_flat: UInt<32>;
+    mhpmevent6_rdata_flat: UInt<32>;
+    mhpmevent7_rdata_flat: UInt<32>;
+    mhpmevent8_rdata_flat: UInt<32>;
+    mhpmevent9_rdata_flat: UInt<32>;
+    mhpmevent10_rdata_flat: UInt<32>;
+    mhpmevent11_rdata_flat: UInt<32>;
+    mhpmevent12_rdata_flat: UInt<32>;
   end struct MTrapIbexCsrFileHwifOut
 
   bus MTrapIbexCsrFileBus
