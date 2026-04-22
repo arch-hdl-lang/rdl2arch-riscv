@@ -5,6 +5,7 @@ module MTrapIbexCsrFile
   port rst: in Reset<Sync>;
   port csr: target MTrapIbexCsrFileBus;
   port granted: in Bool;
+  port cycle_en: in Bool;
   port hwif_in:  in MTrapIbexCsrFileHwifIn;
   port hwif_out: out MTrapIbexCsrFileHwifOut;
 
@@ -19,6 +20,8 @@ module MTrapIbexCsrFile
   reg mie_r: MieReg reset rst => MieReg { wpri_0_0: 0, wpri_2_1: 0, msie: 0, wpri_6_4: 0, mtie: 0, wpri_10_8: 0, meie: 0, wpri_15_12: 0, mfie_0: 0, wpri_hi: 0 };
   reg mip_r: MipReg reset rst => MipReg { wpri_0_0: 0, wpri_2_1: 0, msip: 0, wpri_6_4: 0, mtip: 0, wpri_10_8: 0, meip: 0, wpri_15_12: 0, mfip_0: 0, wpri_hi: 0 };
   reg mcountinhibit_r: McountinhibitReg reset rst => McountinhibitReg { cy: 0, reserved_tm: 0, ir: 0, hpm: 0, reserved_hi: 0 };
+  reg mcycle_r: McycleReg reset rst => McycleReg { value: 0 };
+  reg mcycleh_r: McyclehReg reset rst => McyclehReg { value: 0 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
@@ -31,6 +34,8 @@ module MTrapIbexCsrFile
     12'h304 => {15'h0, mie_r.mfie_0, 4'h0, mie_r.meie, 3'h0, mie_r.mtie, 3'h0, mie_r.msie, 2'h0, false},
     12'h344 => {15'h0, mip_r.mfip_0, 4'h0, mip_r.meip, 3'h0, mip_r.mtip, 3'h0, mip_r.msip, 2'h0, false},
     12'h320 => {19'h0, mcountinhibit_r.hpm, mcountinhibit_r.ir, false, mcountinhibit_r.cy},
+    12'hb00 => mcycle_r.value,
+    12'hb80 => mcycleh_r.value,
     _ => 0
   end match;
 
@@ -63,6 +68,12 @@ module MTrapIbexCsrFile
     mip_r.wpri_hi <= hwif_in.mip_wpri_hi;
     mcountinhibit_r.reserved_tm <= hwif_in.mcountinhibit_reserved_tm;
     mcountinhibit_r.reserved_hi <= hwif_in.mcountinhibit_reserved_hi;
+    if cycle_en
+      mcycle_r.value <= mcycle_r.value +% 1;
+    end if
+    if cycle_en and (mcycle_r.value == 32'hffffffff)
+      mcycleh_r.value <= mcycleh_r.value +% 1;
+    end if
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
         if csr.cmd_addr == 12'h305
@@ -181,6 +192,22 @@ module MTrapIbexCsrFile
               _    => mcountinhibit_r.hpm
             end match;
         end if
+        if csr.cmd_addr == 12'hb00
+          mcycle_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mcycle_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mcycle_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mcycle_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'hb80
+          mcycleh_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => mcycleh_r.value | csr.cmd_wdata[31:0],
+              2'b11 => mcycleh_r.value & (~csr.cmd_wdata[31:0]),
+              _    => mcycleh_r.value
+            end match;
+        end if
       end if
     end if
   end seq
@@ -215,6 +242,10 @@ module MTrapIbexCsrFile
     hwif_out.mcountinhibit_ir = mcountinhibit_r.ir;
     hwif_out.mcountinhibit_hpm = mcountinhibit_r.hpm;
     hwif_out.mcountinhibit_rdata_flat = {19'h0, mcountinhibit_r.hpm, mcountinhibit_r.ir, false, mcountinhibit_r.cy};
+    hwif_out.mcycle_value = mcycle_r.value;
+    hwif_out.mcycle_rdata_flat = mcycle_r.value;
+    hwif_out.mcycleh_value = mcycleh_r.value;
+    hwif_out.mcycleh_rdata_flat = mcycleh_r.value;
   end comb
 
 end module MTrapIbexCsrFile

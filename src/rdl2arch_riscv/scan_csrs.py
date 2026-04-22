@@ -34,6 +34,8 @@ class CsrFieldModel:
     save_on_trap: bool = False
     restore_on_ret: bool = False
     hw_mirror: bool = False
+    hw_increment_when: Optional[str] = None
+    hw_increment_high_of: Optional[str] = None
 
 
 @dataclass
@@ -150,6 +152,8 @@ def _scan_field(f: FieldNode) -> CsrFieldModel:
         save_on_trap=bool(f.get_property("riscv_save_on_trap") or False),
         restore_on_ret=bool(f.get_property("riscv_restore_on_ret") or False),
         hw_mirror=bool(f.get_property("riscv_hw_mirror") or False),
+        hw_increment_when=f.get_property("riscv_hw_increment_when") or None,
+        hw_increment_high_of=f.get_property("riscv_hw_increment_high_of") or None,
     )
 
 

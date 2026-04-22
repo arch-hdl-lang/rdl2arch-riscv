@@ -71,3 +71,73 @@ def validate(design: CsrDesignModel) -> None:
                     f"riscv_restore_on_ret (mirror is an always-on drive, "
                     f"save/restore are event-gated — they can't coexist)"
                 )
+            # Counter fields self-increment inside the CsrFile's seq
+            # block; they must NOT also be driven by hwif_in (that
+            # would fight the increment every cycle).
+            if (fld.hw_increment_when or fld.hw_increment_high_of) and fld.hw_writable:
+                raise UnsupportedRdlError(
+                    f"field '{fld.node.get_path()}': counter fields "
+                    f"(riscv_hw_increment_when / "
+                    f"riscv_hw_increment_high_of) must be `hw = r` — the "
+                    f"CsrFile's seq block drives them directly; a "
+                    f"hwif_in drive would race the increment every cycle"
+                )
+            # Counter fields don't mix with the trap-lifecycle /
+            # mirror family either — the storage either auto-
+            # increments OR is event-gated-overridden OR mirrors a
+            # live wire. Pick one.
+            counter_tag = fld.hw_increment_when or fld.hw_increment_high_of
+            if counter_tag and (
+                fld.save_on_trap
+                or fld.restore_on_ret
+                or fld.hw_mirror
+            ):
+                raise UnsupportedRdlError(
+                    f"field '{fld.node.get_path()}': counter tags "
+                    f"(riscv_hw_increment_*) are mutually exclusive "
+                    f"with riscv_save_on_trap / riscv_restore_on_ret / "
+                    f"riscv_hw_mirror"
+                )
+            # Counter fields must be sw-writable so the RISC-V spec's
+            # "SW writes replace the counter value" semantic works.
+            if counter_tag and not fld.sw_writable:
+                raise UnsupportedRdlError(
+                    f"field '{fld.node.get_path()}': counter fields "
+                    f"(riscv_hw_increment_*) must be `sw = rw` — the "
+                    f"spec says SW can overwrite a counter's value"
+                )
+            # The low-half link has to point at an existing register
+            # with exactly one `riscv_hw_increment_when` field, and
+            # the widths must match.
+            if fld.hw_increment_high_of:
+                low_reg_name = fld.hw_increment_high_of
+                low_reg = next(
+                    (r for r in design.regs if r.name == low_reg_name),
+                    None,
+                )
+                if low_reg is None:
+                    raise UnsupportedRdlError(
+                        f"field '{fld.node.get_path()}': "
+                        f"riscv_hw_increment_high_of = "
+                        f"\"{low_reg_name}\" — no such register in this "
+                        f"design"
+                    )
+                low_counter_fields = [
+                    lf for lf in low_reg.fields if lf.hw_increment_when
+                ]
+                if len(low_counter_fields) != 1:
+                    raise UnsupportedRdlError(
+                        f"field '{fld.node.get_path()}': the register "
+                        f"'{low_reg_name}' named in "
+                        f"riscv_hw_increment_high_of must contain "
+                        f"exactly one field tagged "
+                        f"riscv_hw_increment_when (got "
+                        f"{len(low_counter_fields)})"
+                    )
+                if low_counter_fields[0].width != fld.width:
+                    raise UnsupportedRdlError(
+                        f"field '{fld.node.get_path()}': counter high "
+                        f"half width ({fld.width}) must match the low "
+                        f"half '{low_reg_name}.{low_counter_fields[0].name}' "
+                        f"width ({low_counter_fields[0].width})"
+                    )

@@ -14,6 +14,13 @@ generator consumes:
 - riscv_hw_mirror      — field's storage is a live mirror of an external
                           signal; generator emits a dedicated input port
                           on the trap coordinator bypassing hwif_in_live.
+- riscv_hw_increment_when   — field is a counter that auto-increments each
+                               clock cycle when the named enable port is
+                               high (e.g. `mcycle` tracking `cycle_en`).
+- riscv_hw_increment_high_of — field is the high half of a 64-bit counter
+                                split across two 32-bit CSRs; links to
+                                the low register declared with
+                                `riscv_hw_increment_when`.
 - riscv_intr_clint_role — tags CLINT MMIO regs (msip / mtimecmp_* / mtime_*).
 - riscv_intr_plic_role  — tags PLIC MMIO regs (priority / pending / enable /
                           threshold / claim).
@@ -33,6 +40,7 @@ from .wpri import RiscvWpri
 from .trap_signal import RiscvTrapSignal
 from .trap_lifecycle import RiscvSaveOnTrap, RiscvRestoreOnRet
 from .hw_mirror import RiscvHwMirror
+from .counter import RiscvHwIncrementWhen, RiscvHwIncrementHighOf
 from .clint import RiscvIntrClintRole
 from .plic import RiscvIntrPlicRole
 
@@ -45,6 +53,8 @@ _RISCV_UDPS = [
     RiscvSaveOnTrap,
     RiscvRestoreOnRet,
     RiscvHwMirror,
+    RiscvHwIncrementWhen,
+    RiscvHwIncrementHighOf,
     RiscvIntrClintRole,
     RiscvIntrPlicRole,
 ]

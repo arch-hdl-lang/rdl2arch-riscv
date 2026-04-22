@@ -41,6 +41,22 @@
 //                                 — the HPM counter increment
 //                                 blocks still reference
 //                                 `mcountinhibit[N]` unchanged.)
+//   6.6b — + mcycle / mcycleh    (the cycle-counter pair, 64-bit
+//                                 logical counter split across two
+//                                 32-bit CSRs. Uses the new
+//                                 `riscv_hw_increment_when` UDP to
+//                                 name an external enable port
+//                                 `cycle_en` on the CsrFile — the
+//                                 adapter wires `cycle_en =
+//                                 ~mcountinhibit[0]`, so SW can
+//                                 freeze the counter via the cy
+//                                 inhibit bit. `minstret` /
+//                                 `minstreth` intentionally stay
+//                                 on Ibex's native path because of
+//                                 the core's speculative-retire +1
+//                                 optimization — pipeline-specific
+//                                 and doesn't belong in the
+//                                 generator.)
 //
 // Anything not yet in this fixture stays on Ibex's native path inside
 // the forked `ibex_cs_registers_hybrid.sv`.
@@ -207,4 +223,29 @@ addrmap m_trap_ibex {
         field { sw = rw; hw = r; reset = 0x0; } hpm[12:3];
         field { sw = r;  hw = w; reset = 0x0; riscv_wpri = true; } reserved_hi[31:13];
     } mcountinhibit @ 0x24;
+
+    reg {
+        // mcycle — low 32 bits of the 64-bit cycle counter.
+        //
+        // `riscv_hw_increment_when = "cycle_en"` tells the generator
+        // to emit a `cycle_en: in Bool` port on the CsrFile and add
+        // a seq-block increment when that port is high. Fields must
+        // be `hw = r` (no hwif_in) since storage is self-driven by
+        // the increment; SW writes still land via the bus and take
+        // priority on the same cycle via last-write-wins.
+        riscv_csr_addr = 0xB00;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_when = "cycle_en"; } value[31:0];
+    } mcycle @ 0x28;
+
+    reg {
+        // mcycleh — high 32 bits. Linked via
+        // `riscv_hw_increment_high_of = "mcycle"`; the generator
+        // emits an increment on the cycle where the low half is at
+        // max AND `cycle_en` is high (the rollover of a joint 64-bit
+        // +1). SW can write either half independently.
+        riscv_csr_addr = 0xB80;
+        field { sw = rw; hw = r; reset = 0x0;
+                riscv_hw_increment_high_of = "mcycle"; } value[31:0];
+    } mcycleh @ 0x2C;
 };

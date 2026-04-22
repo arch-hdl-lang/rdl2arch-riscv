@@ -356,6 +356,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   // are gone; no more flops on this side for this register.
   logic [31:0]                 mcountinhibit;
   logic [31:0]                 mcountinhibit_rsp_rdata;
+  // Phase-6.6b: mcycle / mcycleh bus-side read wires. Storage lives
+  // inside our CsrFile as a self-incrementing counter; upstream's
+  // `u_mcycle_counter_i` instance is removed below.
+  logic [31:0]                 mcycle_rsp_rdata;
+  logic [31:0]                 mcycleh_rsp_rdata;
   // END rdl2arch
 
   // mhpmcounter flops are elaborated below providing only the precise number that is required based
@@ -591,7 +596,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         csr_rdata_int = mhpmevent[mhpmcounter_idx];
       end
 
-      CSR_MCYCLE,
+      // Phase-6.6b: mcycle / mcycleh moved to our CsrFile.
+      CSR_MCYCLE:  csr_rdata_int = mcycle_rsp_rdata;
+      CSR_MCYCLEH: csr_rdata_int = mcycleh_rsp_rdata;
+
       CSR_MINSTRET,
       CSR_MHPMCOUNTER3,
       CSR_MHPMCOUNTER4,  CSR_MHPMCOUNTER5,  CSR_MHPMCOUNTER6,  CSR_MHPMCOUNTER7,
@@ -604,7 +612,6 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         csr_rdata_int = mhpmcounter[mhpmcounter_idx][31:0];
       end
 
-      CSR_MCYCLEH,
       CSR_MINSTRETH,
       CSR_MHPMCOUNTER3H,
       CSR_MHPMCOUNTER4H,  CSR_MHPMCOUNTER5H,  CSR_MHPMCOUNTER6H,  CSR_MHPMCOUNTER7H,
@@ -808,7 +815,11 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
         // CsrFile; no write-enable pulse needed on this side.
         CSR_MCOUNTINHIBIT: ;
 
-        CSR_MCYCLE,
+        // Phase-6.6b: mcycle / mcycleh writes route through our
+        // CsrFile bus; no write-enable pulse needed on this side.
+        CSR_MCYCLE:  ;
+        CSR_MCYCLEH: ;
+
         CSR_MINSTRET,
         CSR_MHPMCOUNTER3,
         CSR_MHPMCOUNTER4,  CSR_MHPMCOUNTER5,  CSR_MHPMCOUNTER6,  CSR_MHPMCOUNTER7,
@@ -821,7 +832,6 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
           mhpmcounter_we[mhpmcounter_idx] = 1'b1;
         end
 
-        CSR_MCYCLEH,
         CSR_MINSTRETH,
         CSR_MHPMCOUNTER3H,
         CSR_MHPMCOUNTER4H,  CSR_MHPMCOUNTER5H,  CSR_MHPMCOUNTER6H,  CSR_MHPMCOUNTER7H,
@@ -1414,19 +1424,29 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     end
   end
 
-  // mcycle
-  ibex_counter #(
-    .CounterWidth(64)
-  ) mcycle_counter_i (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .counter_inc_i(mhpmcounter_incr[0] & ~mcountinhibit[0]),
-    .counterh_we_i(mhpmcounterh_we[0]),
-    .counter_we_i(mhpmcounter_we[0]),
-    .counter_val_i(csr_wdata_int),
-    .counter_val_o(mhpmcounter[0]),
-    .counter_val_upd_o()
-  );
+  // BEGIN rdl2arch (Phase 6.6b): mcycle / mcycleh moved to our
+  // CsrFile. The upstream `mcycle_counter_i` ibex_counter instance
+  // is gone; storage auto-increments inside the generated file
+  // whenever `cycle_en` (wired on the CsrFile instance below to
+  // `mhpmcounter_incr[0] & ~mcountinhibit[0]`) is high.
+  //
+  // Ibex's `ibex_core.sv` RVFI tracing taps
+  // `cs_registers_i.mcycle_counter_i.counter_val_o` hierarchically,
+  // so we keep a named block with that shape. It surfaces the joint
+  // 64-bit view of our CsrFile's mcycleh:mcycle as the same
+  // `counter_val_o` signal the upstream module exposed, so the
+  // RVFI refs resolve unchanged.
+  if (1) begin : mcycle_counter_i
+    logic [63:0] counter_val_o;
+    assign counter_val_o = {ourfile_hwif_out.mcycleh_value,
+                            ourfile_hwif_out.mcycle_value};
+  end
+
+  // `mhpmcounter[0]` is still an internal wire consumed by the
+  // unified HPM counter read arm; nothing reads our mcycle via it
+  // any more, so tie to zero for lint cleanliness.
+  assign mhpmcounter[0] = 64'b0;
+  // END rdl2arch
 
 
   // minstret
@@ -1822,7 +1842,9 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
                            | (csr_addr_i == CSR_MSTATUS)
                            | (csr_addr_i == CSR_MIE)
                            | (csr_addr_i == CSR_MIP)
-                           | (csr_addr_i == CSR_MCOUNTINHIBIT);
+                           | (csr_addr_i == CSR_MCOUNTINHIBIT)
+                           | (csr_addr_i == CSR_MCYCLE)
+                           | (csr_addr_i == CSR_MCYCLEH);
 
   // SW-side cmd.
   //
@@ -1870,6 +1892,8 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign mie_rsp_rdata      = ourfile_rsp_rdata;
   assign mip_rsp_rdata      = ourfile_rsp_rdata;
   assign mcountinhibit_rsp_rdata = ourfile_rsp_rdata;
+  assign mcycle_rsp_rdata   = ourfile_rsp_rdata;
+  assign mcycleh_rsp_rdata  = ourfile_rsp_rdata;
 
   // ── HW save + restore path ────────────────────────────────────
   //
@@ -2012,6 +2036,10 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     .csr_rsp_valid (ourfile_rsp_valid),
     .csr_rsp_rdata (ourfile_rsp_rdata),
     .granted       (1'b1),
+    // mcycle increment enable. Matches upstream's counter_inc_i
+    // formula: the active-counter event (always high for cycle
+    // counting) AND not inhibited via mcountinhibit.cy.
+    .cycle_en      (mhpmcounter_incr[0] & ~mcountinhibit[0]),
     .hwif_in       (ourfile_hwif_in),
     .hwif_out      (ourfile_hwif_out)
   );

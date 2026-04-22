@@ -261,6 +261,85 @@ def test_validate_rejects_hw_mirror_with_save_on_trap(tmp_path) -> None:
         raise AssertionError("expected UnsupportedRdlError for hw_mirror + save_on_trap")
 
 
+def test_csr_file_emits_counter_increment(tmp_path) -> None:
+    """`riscv_hw_increment_when` + `riscv_hw_increment_high_of` make
+    the CsrFile emit an enable port and auto-increment logic inside the
+    seq block — for both the low half (direct +1) and the high half
+    (+1 on low-rollover). SW write still takes priority via the
+    seq block's last-write-wins ordering."""
+    from rdl2arch_riscv.emit_csr_file import emit_csr_file
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            default riscv_priv = "m";
+            reg {
+                riscv_csr_addr = 0xB00;
+                field { sw = rw; hw = r; reset = 0;
+                        riscv_hw_increment_when = "cycle_en"; } value[31:0];
+            } mcycle @ 0x0;
+            reg {
+                riscv_csr_addr = 0xB80;
+                field { sw = rw; hw = r; reset = 0;
+                        riscv_hw_increment_high_of = "mcycle"; } value[31:0];
+            } mcycleh @ 0x4;
+        };
+    """)
+    d = scan(top)
+    src = emit_csr_file(d)
+    # Enable port declared.
+    assert "port cycle_en: in Bool;" in src
+    # Low-half increment: +1 when enable is high.
+    assert "if cycle_en" in src
+    assert "mcycle_r.value <= mcycle_r.value +% 1;" in src
+    # High-half increment: +1 when enable is high AND low is at max.
+    assert "if cycle_en and (mcycle_r.value == 32'hffffffff)" in src
+    assert "mcycleh_r.value <= mcycleh_r.value +% 1;" in src
+
+
+def test_validate_rejects_counter_with_hw_writable(tmp_path) -> None:
+    from rdl2arch_riscv.validate_csrs import validate, UnsupportedRdlError
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0xB00;
+                field { sw = rw; hw = rw; reset = 0;
+                        riscv_hw_increment_when = "cycle_en"; } value[31:0];
+            } mcycle @ 0x0;
+        };
+    """)
+    d = scan(top)
+    try:
+        validate(d)
+    except UnsupportedRdlError as e:
+        assert "riscv_hw_increment" in str(e)
+        assert "hw = r" in str(e)
+    else:
+        raise AssertionError(
+            "expected UnsupportedRdlError for counter field with hw=rw"
+        )
+
+
+def test_validate_rejects_counter_high_without_low(tmp_path) -> None:
+    from rdl2arch_riscv.validate_csrs import validate, UnsupportedRdlError
+    top = _compile_rdl(tmp_path, """
+        addrmap t {
+            reg {
+                riscv_csr_addr = 0xB80;
+                field { sw = rw; hw = r; reset = 0;
+                        riscv_hw_increment_high_of = "nonexistent"; } value[31:0];
+            } mcycleh @ 0x0;
+        };
+    """)
+    d = scan(top)
+    try:
+        validate(d)
+    except UnsupportedRdlError as e:
+        assert "nonexistent" in str(e)
+    else:
+        raise AssertionError(
+            "expected UnsupportedRdlError for high-of pointing at missing reg"
+        )
+
+
 def test_csr_file_emits_reg_rdata_flat(tmp_path) -> None:
     """Every register gains a `<reg>_rdata_flat: UInt<xlen>` member on
     hwif_out, driven with the same spec-layout expression the SW
