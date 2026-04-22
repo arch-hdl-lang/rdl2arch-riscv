@@ -34,7 +34,7 @@ PROGS     := timer_isr sw_isr ext_isr multictx_isr \
              mscratch_csrfile mtvec_csrfile \
              mepc_mcause_mtval_csrfile mstatus_csrfile \
              mie_mip_csrfile mcountinhibit_csrfile \
-             mcycle_csrfile
+             mcycle_csrfile debug_csrs_csrfile
 
 VMEMS     := $(PROGS:%=$(BUILD)/%.vmem)
 DISES     := $(PROGS:%=$(BUILD)/%.dis)

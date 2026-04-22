@@ -11,7 +11,11 @@ package MTrapIbexCsrFilePkg
     Mip,
     Mcountinhibit,
     Mcycle,
-    Mcycleh
+    Mcycleh,
+    Dcsr,
+    Dpc,
+    Dscratch0,
+    Dscratch1
   end enum MTrapIbexCsrFileAddr
 
   struct MtvecReg
@@ -88,6 +92,38 @@ package MTrapIbexCsrFilePkg
     value: UInt<32>;
   end struct McyclehReg
 
+  struct DcsrReg
+    prv: UInt<2>;
+    step: UInt<1>;
+    nmip: UInt<1>;
+    mprven: UInt<1>;
+    reserved_5: UInt<1>;
+    cause: UInt<3>;
+    stoptime: UInt<1>;
+    stopcount: UInt<1>;
+    stepie: UInt<1>;
+    ebreaku: UInt<1>;
+    ebreaks: UInt<1>;
+    reserved_14: UInt<1>;
+    ebreakm: UInt<1>;
+    ebreakvu: UInt<1>;
+    ebreakvs: UInt<1>;
+    reserved_27_18: UInt<10>;
+    xdebugver: UInt<4>;
+  end struct DcsrReg
+
+  struct DpcReg
+    dpc: UInt<32>;
+  end struct DpcReg
+
+  struct Dscratch0Reg
+    value: UInt<32>;
+  end struct Dscratch0Reg
+
+  struct Dscratch1Reg
+    value: UInt<32>;
+  end struct Dscratch1Reg
+
   struct MTrapIbexCsrFileHwifIn
     mepc_epc: UInt<32>;
     mcause_cause: UInt<32>;
@@ -117,6 +153,18 @@ package MTrapIbexCsrFilePkg
     mip_wpri_hi: UInt<15>;
     mcountinhibit_reserved_tm: UInt<1>;
     mcountinhibit_reserved_hi: UInt<19>;
+    dcsr_nmip: UInt<1>;
+    dcsr_mprven: UInt<1>;
+    dcsr_reserved_5: UInt<1>;
+    dcsr_cause: UInt<3>;
+    dcsr_stoptime: UInt<1>;
+    dcsr_stopcount: UInt<1>;
+    dcsr_stepie: UInt<1>;
+    dcsr_ebreaks: UInt<1>;
+    dcsr_reserved_14: UInt<1>;
+    dcsr_ebreakvu: UInt<1>;
+    dcsr_ebreakvs: UInt<1>;
+    dcsr_reserved_27_18: UInt<10>;
   end struct MTrapIbexCsrFileHwifIn
 
   struct MTrapIbexCsrFileHwifOut
@@ -150,6 +198,18 @@ package MTrapIbexCsrFilePkg
     mcycle_rdata_flat: UInt<32>;
     mcycleh_value: UInt<32>;
     mcycleh_rdata_flat: UInt<32>;
+    dcsr_prv: UInt<2>;
+    dcsr_step: UInt<1>;
+    dcsr_ebreaku: UInt<1>;
+    dcsr_ebreakm: UInt<1>;
+    dcsr_xdebugver: UInt<4>;
+    dcsr_rdata_flat: UInt<32>;
+    dpc_dpc: UInt<32>;
+    dpc_rdata_flat: UInt<32>;
+    dscratch0_value: UInt<32>;
+    dscratch0_rdata_flat: UInt<32>;
+    dscratch1_value: UInt<32>;
+    dscratch1_rdata_flat: UInt<32>;
   end struct MTrapIbexCsrFileHwifOut
 
   bus MTrapIbexCsrFileBus

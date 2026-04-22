@@ -22,6 +22,10 @@ module MTrapIbexCsrFile
   reg mcountinhibit_r: McountinhibitReg reset rst => McountinhibitReg { cy: 0, reserved_tm: 0, ir: 0, hpm: 0, reserved_hi: 0 };
   reg mcycle_r: McycleReg reset rst => McycleReg { value: 0 };
   reg mcycleh_r: McyclehReg reset rst => McyclehReg { value: 0 };
+  reg dcsr_r: DcsrReg reset rst => DcsrReg { prv: 3, step: 0, nmip: 0, mprven: 0, reserved_5: 0, cause: 0, stoptime: 0, stopcount: 0, stepie: 0, ebreaku: 0, ebreaks: 0, reserved_14: 0, ebreakm: 0, ebreakvu: 0, ebreakvs: 0, reserved_27_18: 0, xdebugver: 4 };
+  reg dpc_r: DpcReg reset rst => DpcReg { dpc: 0 };
+  reg dscratch0_r: Dscratch0Reg reset rst => Dscratch0Reg { value: 0 };
+  reg dscratch1_r: Dscratch1Reg reset rst => Dscratch1Reg { value: 0 };
 
 
   let csr_rdata_mux: UInt<32> = match csr.cmd_addr
@@ -36,6 +40,10 @@ module MTrapIbexCsrFile
     12'h320 => {19'h0, mcountinhibit_r.hpm, mcountinhibit_r.ir, false, mcountinhibit_r.cy},
     12'hb00 => mcycle_r.value,
     12'hb80 => mcycleh_r.value,
+    12'h7b0 => {dcsr_r.xdebugver, 10'h0, false, false, dcsr_r.ebreakm, false, false, dcsr_r.ebreaku, false, false, false, dcsr_r.cause, false, false, dcsr_r.nmip, dcsr_r.step, dcsr_r.prv},
+    12'h7b1 => dpc_r.dpc,
+    12'h7b2 => dscratch0_r.value,
+    12'h7b3 => dscratch1_r.value,
     _ => 0
   end match;
 
@@ -68,6 +76,18 @@ module MTrapIbexCsrFile
     mip_r.wpri_hi <= hwif_in.mip_wpri_hi;
     mcountinhibit_r.reserved_tm <= hwif_in.mcountinhibit_reserved_tm;
     mcountinhibit_r.reserved_hi <= hwif_in.mcountinhibit_reserved_hi;
+    dcsr_r.nmip <= hwif_in.dcsr_nmip;
+    dcsr_r.mprven <= hwif_in.dcsr_mprven;
+    dcsr_r.reserved_5 <= hwif_in.dcsr_reserved_5;
+    dcsr_r.cause <= hwif_in.dcsr_cause;
+    dcsr_r.stoptime <= hwif_in.dcsr_stoptime;
+    dcsr_r.stopcount <= hwif_in.dcsr_stopcount;
+    dcsr_r.stepie <= hwif_in.dcsr_stepie;
+    dcsr_r.ebreaks <= hwif_in.dcsr_ebreaks;
+    dcsr_r.reserved_14 <= hwif_in.dcsr_reserved_14;
+    dcsr_r.ebreakvu <= hwif_in.dcsr_ebreakvu;
+    dcsr_r.ebreakvs <= hwif_in.dcsr_ebreakvs;
+    dcsr_r.reserved_27_18 <= hwif_in.dcsr_reserved_27_18;
     if cycle_en
       mcycle_r.value <= mcycle_r.value +% 1;
     end if
@@ -208,6 +228,60 @@ module MTrapIbexCsrFile
               _    => mcycleh_r.value
             end match;
         end if
+        if csr.cmd_addr == 12'h7b0
+          dcsr_r.prv <= match (match csr.cmd_op
+              2'b01 => csr.cmd_wdata[1:0],
+              2'b10 => dcsr_r.prv | csr.cmd_wdata[1:0],
+              2'b11 => dcsr_r.prv & (~csr.cmd_wdata[1:0]),
+              _    => dcsr_r.prv
+            end match)
+              2'h0 => 2'h0,
+              2'h3 => 2'h3,
+              _    => 2'h0
+            end match;
+          dcsr_r.step <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[2],
+              2'b10 => dcsr_r.step | csr.cmd_wdata[2],
+              2'b11 => dcsr_r.step & (~csr.cmd_wdata[2]),
+              _    => dcsr_r.step
+            end match;
+          dcsr_r.ebreaku <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[12],
+              2'b10 => dcsr_r.ebreaku | csr.cmd_wdata[12],
+              2'b11 => dcsr_r.ebreaku & (~csr.cmd_wdata[12]),
+              _    => dcsr_r.ebreaku
+            end match;
+          dcsr_r.ebreakm <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[15],
+              2'b10 => dcsr_r.ebreakm | csr.cmd_wdata[15],
+              2'b11 => dcsr_r.ebreakm & (~csr.cmd_wdata[15]),
+              _    => dcsr_r.ebreakm
+            end match;
+        end if
+        if csr.cmd_addr == 12'h7b1
+          dpc_r.dpc <= (match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => dpc_r.dpc | csr.cmd_wdata[31:0],
+              2'b11 => dpc_r.dpc & (~csr.cmd_wdata[31:0]),
+              _    => dpc_r.dpc
+            end match) & 32'hfffffffe;
+        end if
+        if csr.cmd_addr == 12'h7b2
+          dscratch0_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => dscratch0_r.value | csr.cmd_wdata[31:0],
+              2'b11 => dscratch0_r.value & (~csr.cmd_wdata[31:0]),
+              _    => dscratch0_r.value
+            end match;
+        end if
+        if csr.cmd_addr == 12'h7b3
+          dscratch1_r.value <= match csr.cmd_op
+              2'b01 => csr.cmd_wdata[31:0],
+              2'b10 => dscratch1_r.value | csr.cmd_wdata[31:0],
+              2'b11 => dscratch1_r.value & (~csr.cmd_wdata[31:0]),
+              _    => dscratch1_r.value
+            end match;
+        end if
       end if
     end if
   end seq
@@ -246,6 +320,18 @@ module MTrapIbexCsrFile
     hwif_out.mcycle_rdata_flat = mcycle_r.value;
     hwif_out.mcycleh_value = mcycleh_r.value;
     hwif_out.mcycleh_rdata_flat = mcycleh_r.value;
+    hwif_out.dcsr_prv = dcsr_r.prv;
+    hwif_out.dcsr_step = dcsr_r.step;
+    hwif_out.dcsr_ebreaku = dcsr_r.ebreaku;
+    hwif_out.dcsr_ebreakm = dcsr_r.ebreakm;
+    hwif_out.dcsr_xdebugver = dcsr_r.xdebugver;
+    hwif_out.dcsr_rdata_flat = {dcsr_r.xdebugver, 10'h0, false, false, dcsr_r.ebreakm, false, false, dcsr_r.ebreaku, false, false, false, dcsr_r.cause, false, false, dcsr_r.nmip, dcsr_r.step, dcsr_r.prv};
+    hwif_out.dpc_dpc = dpc_r.dpc;
+    hwif_out.dpc_rdata_flat = dpc_r.dpc;
+    hwif_out.dscratch0_value = dscratch0_r.value;
+    hwif_out.dscratch0_rdata_flat = dscratch0_r.value;
+    hwif_out.dscratch1_value = dscratch1_r.value;
+    hwif_out.dscratch1_rdata_flat = dscratch1_r.value;
   end comb
 
 end module MTrapIbexCsrFile
