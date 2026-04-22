@@ -263,7 +263,7 @@ module ibex_mini_soc
 
   Clint u_clint_regblock (
     .clk            (clk_sys),
-    .rst            (~rst_sys_n),
+    .rst            (rst_sys_n),
     .s_axi_aw_valid (clint_aw_valid),
     .s_axi_aw_ready (clint_aw_ready),
     .s_axi_aw_addr  (clint_aw_addr),
@@ -289,7 +289,7 @@ module ibex_mini_soc
 
   ClintLogic u_clint_logic (
     .clk        (clk_sys),
-    .rst        (~rst_sys_n),
+    .rst        (rst_sys_n),
     .mtime_tick (1'b1),              // tick every cycle — sim-test knob
     .hwif_out   (clint_hwif_out),    // regblock -> logic
     .hwif_in    (clint_hwif_in),     // logic   -> regblock
@@ -364,7 +364,7 @@ module ibex_mini_soc
 
   PlicMultictx u_plic_regblock (
     .clk                     (clk_sys),
-    .rst                     (~rst_sys_n),
+    .rst                     (rst_sys_n),
     .s_axi_aw_valid          (plic_aw_valid),
     .s_axi_aw_ready          (plic_aw_ready),
     .s_axi_aw_addr           (plic_aw_addr),
@@ -406,7 +406,7 @@ module ibex_mini_soc
 
   PlicMultictxLogic u_plic_logic (
     .clk                     (clk_sys),
-    .rst                     (~rst_sys_n),
+    .rst                     (rst_sys_n),
     .source_in               (plic_source_in),
     .hwif_out                (plic_hwif_out),
     .hwif_in                 (plic_hwif_in),

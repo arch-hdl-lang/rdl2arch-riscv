@@ -235,13 +235,6 @@ def verilator_runner(
             "-Wno-UNUSEDPARAM",
             "-Wno-PINMISSING",
             "-Wno-WIDTHEXPAND",
-            # Our CsrFile / CLINT / PLIC now use Async, Low reset
-            # (matches Ibex's rst_ni). Ibex's RAMs in the shared tree
-            # still sample rst sync, so the same top-level IO_RST_N
-            # legitimately goes into both sync and async flop
-            # domains. A real SoC has a reset controller; our sim
-            # flow is fine mixing them.
-            "-Wno-SYNCASYNCNET",
             "-Wno-fatal",
         ],
     )
