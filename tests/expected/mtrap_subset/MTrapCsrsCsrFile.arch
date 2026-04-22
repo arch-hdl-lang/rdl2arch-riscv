@@ -2,7 +2,7 @@ use MTrapCsrsCsrFilePkg;
 
 module MTrapCsrsCsrFile
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port csr: target MTrapCsrsCsrFileBus;
   port granted: in Bool;
   port mtvec_write: out Bool;

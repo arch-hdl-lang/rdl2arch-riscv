@@ -2,7 +2,7 @@ use PrivOverrideCsrFilePkg;
 
 module PrivOverrideRiscvTop
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
 
   port csr_cmd_valid: in  Bool;
   port csr_cmd_ready: out Bool;

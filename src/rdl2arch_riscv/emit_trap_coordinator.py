@@ -36,7 +36,7 @@ Responsibilities:
 Interface:
 
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port trap_enter:        in Bool;
   port xret_enter:        in Bool;
   port save_<member>:     in UInt<W>   per save-on-trap field, W = field width
@@ -95,7 +95,7 @@ def emit_trap_coordinator(design: CsrDesignModel, module_name: str) -> str:
     lines.append("")
     lines.append(f"module {module_name}")
     lines.append("  port clk: in Clock<SysDomain>;")
-    lines.append("  port rst: in Reset<Sync>;")
+    lines.append("  port rst: in Reset<Async, Low>;")
     lines.append("  port trap_enter: in Bool;")
     lines.append("  port xret_enter: in Bool;")
 

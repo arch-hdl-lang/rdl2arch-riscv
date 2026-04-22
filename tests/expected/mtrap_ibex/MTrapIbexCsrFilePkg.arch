@@ -315,16 +315,6 @@ package MTrapIbexCsrFilePkg
     dcsr_ebreakvu: UInt<1>;
     dcsr_ebreakvs: UInt<1>;
     dcsr_reserved_27_18: UInt<10>;
-    mhpmevent3_value: UInt<32>;
-    mhpmevent4_value: UInt<32>;
-    mhpmevent5_value: UInt<32>;
-    mhpmevent6_value: UInt<32>;
-    mhpmevent7_value: UInt<32>;
-    mhpmevent8_value: UInt<32>;
-    mhpmevent9_value: UInt<32>;
-    mhpmevent10_value: UInt<32>;
-    mhpmevent11_value: UInt<32>;
-    mhpmevent12_value: UInt<32>;
   end struct MTrapIbexCsrFileHwifIn
 
   struct MTrapIbexCsrFileHwifOut
@@ -410,15 +400,25 @@ package MTrapIbexCsrFilePkg
     mhpmcounter11h_rdata_flat: UInt<32>;
     mhpmcounter12h_value: UInt<32>;
     mhpmcounter12h_rdata_flat: UInt<32>;
+    mhpmevent3_value: UInt<32>;
     mhpmevent3_rdata_flat: UInt<32>;
+    mhpmevent4_value: UInt<32>;
     mhpmevent4_rdata_flat: UInt<32>;
+    mhpmevent5_value: UInt<32>;
     mhpmevent5_rdata_flat: UInt<32>;
+    mhpmevent6_value: UInt<32>;
     mhpmevent6_rdata_flat: UInt<32>;
+    mhpmevent7_value: UInt<32>;
     mhpmevent7_rdata_flat: UInt<32>;
+    mhpmevent8_value: UInt<32>;
     mhpmevent8_rdata_flat: UInt<32>;
+    mhpmevent9_value: UInt<32>;
     mhpmevent9_rdata_flat: UInt<32>;
+    mhpmevent10_value: UInt<32>;
     mhpmevent10_rdata_flat: UInt<32>;
+    mhpmevent11_value: UInt<32>;
     mhpmevent11_rdata_flat: UInt<32>;
+    mhpmevent12_value: UInt<32>;
     mhpmevent12_rdata_flat: UInt<32>;
   end struct MTrapIbexCsrFileHwifOut
 

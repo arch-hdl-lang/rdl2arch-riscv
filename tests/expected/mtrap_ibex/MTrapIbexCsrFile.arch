@@ -2,7 +2,7 @@ use MTrapIbexCsrFilePkg;
 
 module MTrapIbexCsrFile
   port clk: in Clock<SysDomain>;
-  port rst: in Reset<Sync>;
+  port rst: in Reset<Async, Low>;
   port csr: target MTrapIbexCsrFileBus;
   port granted: in Bool;
   port cycle_en: in Bool;
@@ -158,16 +158,6 @@ module MTrapIbexCsrFile
     dcsr_r.ebreakvu <= hwif_in.dcsr_ebreakvu;
     dcsr_r.ebreakvs <= hwif_in.dcsr_ebreakvs;
     dcsr_r.reserved_27_18 <= hwif_in.dcsr_reserved_27_18;
-    mhpmevent3_r.value <= hwif_in.mhpmevent3_value;
-    mhpmevent4_r.value <= hwif_in.mhpmevent4_value;
-    mhpmevent5_r.value <= hwif_in.mhpmevent5_value;
-    mhpmevent6_r.value <= hwif_in.mhpmevent6_value;
-    mhpmevent7_r.value <= hwif_in.mhpmevent7_value;
-    mhpmevent8_r.value <= hwif_in.mhpmevent8_value;
-    mhpmevent9_r.value <= hwif_in.mhpmevent9_value;
-    mhpmevent10_r.value <= hwif_in.mhpmevent10_value;
-    mhpmevent11_r.value <= hwif_in.mhpmevent11_value;
-    mhpmevent12_r.value <= hwif_in.mhpmevent12_value;
     if cycle_en
       mcycle_r.value <= mcycle_r.value +% 1;
     end if
@@ -672,15 +662,25 @@ module MTrapIbexCsrFile
     hwif_out.mhpmcounter11h_rdata_flat = mhpmcounter11h_r.value;
     hwif_out.mhpmcounter12h_value = mhpmcounter12h_r.value;
     hwif_out.mhpmcounter12h_rdata_flat = mhpmcounter12h_r.value;
+    hwif_out.mhpmevent3_value = mhpmevent3_r.value;
     hwif_out.mhpmevent3_rdata_flat = mhpmevent3_r.value;
+    hwif_out.mhpmevent4_value = mhpmevent4_r.value;
     hwif_out.mhpmevent4_rdata_flat = mhpmevent4_r.value;
+    hwif_out.mhpmevent5_value = mhpmevent5_r.value;
     hwif_out.mhpmevent5_rdata_flat = mhpmevent5_r.value;
+    hwif_out.mhpmevent6_value = mhpmevent6_r.value;
     hwif_out.mhpmevent6_rdata_flat = mhpmevent6_r.value;
+    hwif_out.mhpmevent7_value = mhpmevent7_r.value;
     hwif_out.mhpmevent7_rdata_flat = mhpmevent7_r.value;
+    hwif_out.mhpmevent8_value = mhpmevent8_r.value;
     hwif_out.mhpmevent8_rdata_flat = mhpmevent8_r.value;
+    hwif_out.mhpmevent9_value = mhpmevent9_r.value;
     hwif_out.mhpmevent9_rdata_flat = mhpmevent9_r.value;
+    hwif_out.mhpmevent10_value = mhpmevent10_r.value;
     hwif_out.mhpmevent10_rdata_flat = mhpmevent10_r.value;
+    hwif_out.mhpmevent11_value = mhpmevent11_r.value;
     hwif_out.mhpmevent11_rdata_flat = mhpmevent11_r.value;
+    hwif_out.mhpmevent12_value = mhpmevent12_r.value;
     hwif_out.mhpmevent12_rdata_flat = mhpmevent12_r.value;
   end comb
 

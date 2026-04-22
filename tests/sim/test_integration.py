@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from sim.driver import reset, tick
+from sim.driver import reset_async_low as reset, tick
 from sim.harness import fresh_dut
 
 

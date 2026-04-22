@@ -2069,29 +2069,6 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
   assign ourfile_hwif_in_live.mcountinhibit_reserved_tm = '0;
   assign ourfile_hwif_in_live.mcountinhibit_reserved_hi = '0;
 
-  // ── mhpmevent3..12 constant drives ────────────────────────────
-  // Each mhpmeventN is `sw=r;hw=w;reset=0` in the RDL; we drive
-  // hwif_in.mhpmeventN = 1 << (N-3) every cycle, matching Ibex's
-  // hardwired event-selector encoding.
-  //
-  // Note: a `sw=r;hw=r;reset=<const>` encoding would be cleaner
-  // (arch-com emits a reset-time always_ff for orphan-reset regs),
-  // but Ibex's `core_clock_gate_i` in `ibex_top` gates the core
-  // clock off whenever `core_busy | debug_req | irq_pending |
-  // irq_nm` is low — which is exactly during reset. A reset-only
-  // flop never sees a posedge to latch its value. Driving hwif_in
-  // every cycle sidesteps the clock-gate dependency.
-  assign ourfile_hwif_in_live.mhpmevent3_value  = 32'h1;
-  assign ourfile_hwif_in_live.mhpmevent4_value  = 32'h2;
-  assign ourfile_hwif_in_live.mhpmevent5_value  = 32'h4;
-  assign ourfile_hwif_in_live.mhpmevent6_value  = 32'h8;
-  assign ourfile_hwif_in_live.mhpmevent7_value  = 32'h10;
-  assign ourfile_hwif_in_live.mhpmevent8_value  = 32'h20;
-  assign ourfile_hwif_in_live.mhpmevent9_value  = 32'h40;
-  assign ourfile_hwif_in_live.mhpmevent10_value = 32'h80;
-  assign ourfile_hwif_in_live.mhpmevent11_value = 32'h100;
-  assign ourfile_hwif_in_live.mhpmevent12_value = 32'h200;
-
   // ── dcsr WPRI + HW-written-by-spec drives ────────────────────
   // All of these are `sw=r; hw=w` in the RDL. Most are WPRI
   // (read-as-zero, writes discarded); `cause` and `nmip` are
@@ -2126,7 +2103,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
 
   MTrapIbexCsrTrapCoord u_ourfile_trap (
     .clk                 (clk_i),
-    .rst                 (~rst_ni),
+    .rst                 (rst_ni),
     .trap_enter          (csr_save_cause_i),
     .xret_enter          (csr_restore_mret_i),
     // Ibex's `exception_pc` is already aligned (bit 0 always zero);
@@ -2157,7 +2134,7 @@ module ibex_cs_registers import ibex_pkg::*, MTrapIbexCsrFilePkg::*; #(
     .clk           (clk_i),
     // Ibex drives rst_ni active-low; the generated file takes a
     // synchronous active-high reset.
-    .rst           (~rst_ni),
+    .rst           (rst_ni),
     .csr_cmd_valid (ourfile_cmd_valid),
     .csr_cmd_ready (ourfile_cmd_ready),
     .csr_cmd_addr  (ourfile_cmd_addr),
