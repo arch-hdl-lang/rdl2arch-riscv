@@ -126,21 +126,25 @@ addrmap m_trap_ibex {
     } mstatus @ 0x18;
 
     reg {
-        // mtvec. Kept with a lean WARL profile for now: mode is a 2-bit
-        // enum legal for {direct (0), vectored (1)}; base is 30 bits.
+        // mtvec: Ibex's WARL profile, which is what the core actually
+        // uses. Ibex's if_stage computes every trap PC from
+        // csr_mtvec_o[31:8] alone (vectored mode, 256-byte-aligned base),
+        // and upstream ibex_cs_registers writes
+        //   mtvec_d = {wdata[31:8], 6'b0, 2'b01}
+        // with reset value 32'h1 (ibex_cs_registers.sv:584-586, 960).
+        // So: BASE[31:8] is SW RW; BASE[7:2] reads as zero (WARL mask on
+        // the base field); MODE is a read-only constant 01 (vectored).
         //
-        // Ibex's hardware always forces `mtvec.MODE = 01` (vectored).
-        // Our generated WARL accepts either value and preserves it —
-        // SW setting mtvec to an aligned trap_entry address lands
-        // mode=0 (direct). Functionally fine in this hybrid because
-        // our vector table at `trap_entry` is 32 copies of
-        // `j common_trap_handler`, so direct-mode dispatch still hits
-        // the same entry. See `tests/cpu/sw/*.S` + cs_registers_hybrid
-        // comments.
+        // An earlier, leaner profile kept all of base[31:2] and a {0,1}
+        // mode as written. Software then read back a trap base the core
+        // did not use: `csrw mtvec, 0x00100241` read back 0x00100241,
+        // while a trap went to 0x00100200. Code that relies on readback
+        // to find its trap entry (the riscv-arch-test framework does)
+        // jumped into the middle of other code.
         riscv_csr_addr = 0x305;
+        field { sw = r;  hw = r; reset = 0x1; } mode[1:0];
         field { sw = rw; hw = r; reset = 0x0;
-                riscv_warl = "0,1"; } mode[1:0];
-        field { sw = rw; hw = r; reset = 0x0; } base[31:2];
+                riscv_warl = "0x3FFFFFC0"; } base[31:2];
     } mtvec @ 0x4;
 
     reg {

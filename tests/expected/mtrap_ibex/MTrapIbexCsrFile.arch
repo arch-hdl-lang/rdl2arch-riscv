@@ -21,7 +21,7 @@ module MTrapIbexCsrFile
 
   default seq on clk rising;
 
-  reg mtvec_r: MtvecReg reset rst => MtvecReg { mode: 0, base: 0 };
+  reg mtvec_r: MtvecReg reset rst => MtvecReg { mode: 1, base: 0 };
   reg mepc_r: MepcReg reset rst => MepcReg { epc: 0 };
   reg mcause_r: McauseReg reset rst => McauseReg { cause: 0 };
   reg mtval_r: MtvalReg reset rst => MtvalReg { tval: 0 };
@@ -227,22 +227,12 @@ module MTrapIbexCsrFile
     if csr.cmd_valid
       if granted and (csr.cmd_op != 2'b00)
         if csr.cmd_addr == 12'h305
-          mtvec_r.mode <= match (match csr.cmd_op
-              2'b01 => csr.cmd_wdata[1:0],
-              2'b10 => mtvec_r.mode | csr.cmd_wdata[1:0],
-              2'b11 => mtvec_r.mode & (~csr.cmd_wdata[1:0]),
-              _    => mtvec_r.mode
-            end match)
-              2'h0 => 2'h0,
-              2'h1 => 2'h1,
-              _    => 2'h0
-            end match;
-          mtvec_r.base <= match csr.cmd_op
+          mtvec_r.base <= (match csr.cmd_op
               2'b01 => csr.cmd_wdata[31:2],
               2'b10 => mtvec_r.base | csr.cmd_wdata[31:2],
               2'b11 => mtvec_r.base & (~csr.cmd_wdata[31:2]),
               _    => mtvec_r.base
-            end match;
+            end match) & 30'h3fffffc0;
         end if
         if csr.cmd_addr == 12'h341
           mepc_r.epc <= (match csr.cmd_op
