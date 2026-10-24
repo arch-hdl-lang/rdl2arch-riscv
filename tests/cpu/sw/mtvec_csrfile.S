@@ -9,8 +9,8 @@
 // tests passing is the real integration proof.
 //
 // This program is a focused unit-style check that complements
-// them: push two distinct patterns through the CSR and verify the
-// readback. Also exercises Ibex's forced init-replay — at reset
+// them: push three patterns through the CSR and verify the readback
+// follows Ibex's WARL (base[31:8] kept, base[7:2] zero, mode 01). Also exercises Ibex's forced init-replay — at reset
 // our adapter writes `{boot_addr[31:8], 6'b0, 2'b01}` into mtvec
 // before any SW instruction runs, so the very first readback
 // should see that init value, not the RDL reset (0).
@@ -43,19 +43,31 @@ _start:
     la     t1, saved_readback_init
     sw     t0, 0(t1)
 
-    // ── round B: SW write + readback (aligned — mode bits zero) ─
-    li     t0, 0xA5A5A5A4                // base [31:2] + mode 00
+    // ── round B: SW write + readback, mode bits 00 ────────────
+    // Ibex WARL: base[31:8] kept, [7:2] read as zero, mode forced to
+    // 01 (vectored). 0xA5A5A5A4 reads back 0xA5A5A501.
+    li     t0, 0xA5A5A5A4
     csrw   mtvec, t0
     csrr   t0, mtvec
     la     t1, saved_readback_a
     sw     t0, 0(t1)
 
-    // ── round C: SW write with mode=01 (vectored) ─────────────
-    // WARL accepts both 0 and 1 for mode; value survives round-trip.
-    li     t0, 0x12345671                // base + mode 01
+    // ── round C: SW write with mode=01 and low base bits set ──
+    // 0x12345671 reads back 0x12345601.
+    li     t0, 0x12345671
     csrw   mtvec, t0
     csrr   t0, mtvec
     la     t1, saved_readback_b
+    sw     t0, 0(t1)
+
+    // ── round D: a 64-byte- but not 256-byte-aligned base ─────
+    // The riscv-arch-test framework writes its trap trampoline
+    // address like this and trusts the readback. 0x00100241 must read
+    // back 0x00100201: the base the core actually vectors to.
+    li     t0, 0x00100241
+    csrw   mtvec, t0
+    csrr   t0, mtvec
+    la     t1, saved_readback_c
     sw     t0, 0(t1)
 
     // ── restore mtvec so a stray trap still lands sanely ──────
@@ -87,9 +99,11 @@ trap_park:
 .globl saved_readback_b
 .globl done_marker
 .globl unexpected_trap_mcause
+.globl saved_readback_c
 .align 2
 saved_readback_init:     .word 0
 saved_readback_a:        .word 0
 saved_readback_b:        .word 0
 done_marker:             .word 0
 unexpected_trap_mcause:  .word 0
+saved_readback_c:        .word 0

@@ -16,8 +16,10 @@
  *
  * CSRs migrated onto `MTrapIbexCsrFile` so far:
  *   6.5a — mscratch  (plain RW, no side-effects)
- *   6.5b — mtvec     (plain RW, but also exported via `csr_mtvec_o`
- *                      for Ibex's if_stage trap-PC calc. We also
+ *   6.5b — mtvec     (Ibex WARL: base[31:8] RW, [7:2] zero, mode
+ *                      fixed 01, enforced by the RDL fixture; exported
+ *                      via `csr_mtvec_o` for Ibex's if_stage trap-PC
+ *                      calc. We also
  *                      replay Ibex's post-reset `csr_mtvec_init_i`
  *                      pulse as a bus write so the CsrFile's mtvec
  *                      storage matches upstream on boot.)

@@ -37,6 +37,7 @@ SAVED_READBACK_A         = 0x0010_1004
 SAVED_READBACK_B         = 0x0010_1008
 DONE_MARKER              = 0x0010_100C
 UNEXPECTED_TRAP_MCAUSE   = 0x0010_1010
+SAVED_READBACK_C         = 0x0010_1014
 
 
 def _mem_word(dut, byte_addr: int) -> int:
@@ -105,21 +106,24 @@ async def mtvec_rw_routes_through_generated_csrfile(dut) -> None:
         f"{_mem_word(dut, SAVED_READBACK_INIT):#x}"
     )
 
-    # Round A — aligned pattern, mode = 00.
-    assert _mem_word(dut, SAVED_READBACK_A) == 0xA5A5A5A4, (
-        f"round A readback: got {_mem_word(dut, SAVED_READBACK_A):#x}, "
-        f"expected 0xA5A5A5A4"
-    )
-
-    # Round B — base changed, mode = 01 (vectored). Our WARL accepts.
-    assert _mem_word(dut, SAVED_READBACK_B) == 0x12345671, (
-        f"round B readback: got {_mem_word(dut, SAVED_READBACK_B):#x}, "
-        f"expected 0x12345671"
-    )
+    # mtvec follows Ibex's WARL: base[31:8] RW, base[7:2] read-as-zero,
+    # mode fixed at 01 (vectored), i.e. readback = (wdata & ~0xFF) | 1.
+    for addr, wdata, name in (
+        (SAVED_READBACK_A, 0xA5A5A5A4, "A (mode 00)"),
+        (SAVED_READBACK_B, 0x12345671, "B (mode 01, low base bits)"),
+        (SAVED_READBACK_C, 0x00100241, "C (64-byte-aligned trampoline)"),
+    ):
+        want = (wdata & ~0xFF) | 0x1
+        got = _mem_word(dut, addr)
+        assert got == want, (
+            f"round {name}: wrote {wdata:#010x}, read back {got:#010x}, "
+            f"expected {want:#010x} (Ibex mtvec WARL)"
+        )
 
     # Direct hierarchical peek into the generated CsrFile. After the
     # final `csrw mtvec, trap_entry` in the program, storage should
-    # equal {trap_entry[31:2], trap_entry[1:0]}.
+    # equal trap_entry's base with mode 01 (trap_entry is 256-byte
+    # aligned, so no base bits are masked).
     #
     # The SV packed struct for `MtvecReg` is
     #   struct packed { logic [1:0] mode; logic [29:0] base; };
@@ -140,16 +144,17 @@ async def mtvec_rw_routes_through_generated_csrfile(dut) -> None:
     base = packed & ((1 << 30) - 1)
     ourfile_mtvec = (base << 2) | mode
     TRAP_ENTRY = 0x0010_0000     # matches link.ld / common.h layout
-    assert ourfile_mtvec == TRAP_ENTRY, (
+    MTVEC_EXPECTED = TRAP_ENTRY | 0x1   # mode = 01 (vectored)
+    assert ourfile_mtvec == MTVEC_EXPECTED, (
         f"CsrFile's mtvec_r = {{base={base:#x}, mode={mode}}} → "
-        f"{ourfile_mtvec:#x}, expected {TRAP_ENTRY:#x} "
-        f"(the final SW-written trap_entry address)"
+        f"{ourfile_mtvec:#x}, expected {MTVEC_EXPECTED:#x} "
+        f"(the final SW-written trap_entry address, mode 01)"
     )
 
     # Core-side output wire should also reflect the stored value.
     csr_mtvec_o_lane = int(
         dut.u_ibex.u_ibex_top.u_ibex_core.cs_registers_i.csr_mtvec_o.value
     )
-    assert csr_mtvec_o_lane == TRAP_ENTRY, (
-        f"csr_mtvec_o = {csr_mtvec_o_lane:#x}, expected {TRAP_ENTRY:#x}"
+    assert csr_mtvec_o_lane == MTVEC_EXPECTED, (
+        f"csr_mtvec_o = {csr_mtvec_o_lane:#x}, expected {MTVEC_EXPECTED:#x}"
     )
